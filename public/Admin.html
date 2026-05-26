@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — จัดการ Token</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: 'Kanit', sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    min-height: 100vh;
+    padding: 32px 20px;
+}
+.container { max-width: 700px; margin: 0 auto; }
+
+h1 {
+    font-size: 22px; font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 10px;
+}
+.sub { font-size: 13px; color: #64748b; margin-bottom: 28px; }
+
+.card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    padding: 24px;
+    margin-bottom: 20px;
+}
+.card-title {
+    font-size: 14px; font-weight: 600;
+    color: #64748b;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+}
+
+.house-row {
+    display: flex; align-items: center;
+    gap: 12px; padding: 14px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.house-row:last-child { border-bottom: none; }
+
+.house-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 22px; font-weight: 700;
+    color: #2563eb;
+    width: 56px; flex-shrink: 0;
+}
+.house-name { flex: 1; font-size: 15px; color: #334155; }
+
+.btn-gen {
+    padding: 9px 18px;
+    background: #2563eb;
+    color: #fff;
+    border: none; border-radius: 8px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+.btn-gen:hover { background: #1d4ed8; }
+.btn-gen:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* URL Result */
+.url-result {
+    margin-top: 6px;
+    display: none;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    flex-direction: column;
+    gap: 6px;
+}
+.url-result.show { display: flex; }
+.url-label { font-size: 11px; color: #94a3b8; letter-spacing: 1px; }
+.url-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: #0f172a;
+    word-break: break-all;
+    line-height: 1.6;
+}
+.url-actions { display: flex; gap: 8px; margin-top: 4px; }
+.btn-copy {
+    padding: 6px 14px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    color: #475569;
+    transition: all 0.2s;
+}
+.btn-copy:hover { background: #e2e8f0; }
+.btn-copy.copied { background: #dcfce7; border-color: #86efac; color: #16a34a; }
+.btn-open {
+    padding: 6px 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    color: #2563eb;
+    text-decoration: none;
+    display: inline-flex; align-items: center;
+}
+.btn-open:hover { background: #dbeafe; }
+
+.warn {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: #92400e;
+    line-height: 1.6;
+}
+
+.status-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 8px; flex-wrap: wrap;
+}
+.badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+}
+.badge-line { background: #dcfce7; color: #16a34a; }
+.badge-noline { background: #f1f5f9; color: #94a3b8; }
+.badge-fcm { background: #eff6ff; color: #2563eb; }
+
+.btn-reset {
+    padding: 6px 14px;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    border-radius: 6px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; color: #e11d48;
+    transition: all 0.2s;
+}
+.btn-reset:hover { background: #fecdd3; }
+.btn-reset:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.section-title {
+    font-size: 18px; font-weight: 700;
+    color: #0f172a; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 8px;
+}
+.add-house-form {
+    display: flex; gap: 10px; margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+.input-field {
+    flex: 1; min-width: 120px;
+    padding: 10px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 14px; color: #1e293b;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.input-field:focus { border-color: #2563eb; }
+.btn-add {
+    padding: 10px 20px;
+    background: #16a34a;
+    color: #fff; border: none;
+    border-radius: 8px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    transition: background 0.2s;
+}
+.btn-add:hover { background: #15803d; }
+.btn-add:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-delete {
+    padding: 6px 14px;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    border-radius: 6px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; color: #e11d48;
+    transition: all 0.2s; white-space: nowrap;
+}
+.btn-delete:hover { background: #fecdd3; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>🏘️ Admin — Village Guard</h1>
+    <div class="sub">จัดการบ้านเลขที่ และ LINE User ID ของลูกบ้าน</div>
+
+    <!-- ── CRUD บ้าน ── -->
+    <div class="section-title">🏠 จัดการบ้านเลขที่</div>
+    <div class="card">
+        <div class="card-title">เพิ่มบ้านใหม่</div>
+        <div class="add-house-form">
+            <input class="input-field" id="inputHouseNumber" placeholder="เลขที่บ้าน เช่น 104" maxlength="10">
+            <input class="input-field" id="inputHouseName" placeholder="ชื่อบ้าน (ไม่ระบุก็ได้)">
+            <button class="btn-add" onclick="addHouse()">+ เพิ่มบ้าน</button>
+        </div>
+        <div class="card-title" style="margin-top:4px;">รายการบ้านทั้งหมด</div>
+        <div id="houseListCrud">
+            <div style="text-align:center;padding:20px;color:#94a3b8">กำลังโหลด...</div>
+        </div>
+    </div>
+
+    <!-- ── LINE Status ── -->
+    <div class="section-title" style="margin-top:8px;">💬 จัดการ LINE User ID</div>
+    <div class="warn">
+        ⚠️ เมื่อกด "Reset LINE" ระบบจะลบ LINE User ID ของบ้านนั้นออกทันที เจ้าของบ้านต้องแอด LINE OA และพิมพ์เลขบ้านใหม่เพื่อเชื่อมต่ออีกครั้ง
+    </div>
+    <br>
+    <div class="card">
+        <div class="card-title">สถานะ LINE ของแต่ละบ้าน</div>
+        <div id="houseList">
+            <div style="text-align:center;padding:20px;color:#94a3b8">กำลังโหลด...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const urls = {};
+
+
+// ==========================================
+// CRUD บ้าน
+// ==========================================
+async function loadHouseCrud() {
+    try {
+        const res = await fetch('/api/houses');
+        const result = await res.json();
+        if (result.status !== 'success') return;
+        renderHouseCrud(result.data);
+    } catch(e) {
+        document.getElementById('houseListCrud').innerHTML =
+            '<div style="color:#e11d48;padding:16px">โหลดข้อมูลไม่ได้</div>';
+    }
+}
+
+function renderHouseCrud(houses) {
+    const el = document.getElementById('houseListCrud');
+    if (houses.length === 0) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">ยังไม่มีบ้านในระบบ</div>';
+        return;
+    }
+    el.innerHTML = houses.map(h => `
+        <div class="house-row">
+            <div class="house-num">${h.house_number}</div>
+            <div class="house-name">${h.house_name}</div>
+            <button class="btn-delete" onclick="deleteHouse('${h.house_number}', this)">🗑️ ลบ</button>
+        </div>
+    `).join('');
+}
+
+async function addHouse() {
+    const houseNumber = document.getElementById('inputHouseNumber').value.trim();
+    const houseName   = document.getElementById('inputHouseName').value.trim();
+    if (!houseNumber) { showToast('⚠️ กรุณากรอกเลขที่บ้าน'); return; }
+
+    const btn = document.querySelector('.btn-add');
+    btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
+
+    try {
+        const res = await fetch('/api/admin/houses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ houseNumber, houseName })
+        });
+        const result = await res.json();
+        if (result.status === 'success') {
+            document.getElementById('inputHouseNumber').value = '';
+            document.getElementById('inputHouseName').value = '';
+            showToast(`✅ เพิ่มบ้าน ${houseNumber} แล้ว`);
+            await loadHouseCrud();
+            await loadHouseStatus(); // refresh LINE status ด้วย
+        } else {
+            showToast('⚠️ ' + result.message);
+        }
+    } catch(e) { showToast('❌ เชื่อมต่อ server ไม่ได้'); }
+
+    btn.disabled = false; btn.textContent = '+ เพิ่มบ้าน';
+}
+
+async function deleteHouse(houseNumber, btn) {
+    if (!confirm(`ลบบ้าน ${houseNumber} ออกจากระบบ?\nข้อมูล token และ LINE ของบ้านนี้จะถูกลบด้วย`)) return;
+    btn.disabled = true; btn.textContent = 'กำลังลบ...';
+
+    try {
+        const res = await fetch(`/api/admin/houses/${houseNumber}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (result.status === 'success') {
+            showToast(`✅ ลบบ้าน ${houseNumber} แล้ว`);
+            await loadHouseCrud();
+            await loadHouseStatus();
+        } else {
+            showToast('⚠️ ' + result.message);
+            btn.disabled = false; btn.textContent = '🗑️ ลบ';
+        }
+    } catch(e) {
+        showToast('❌ เชื่อมต่อ server ไม่ได้');
+        btn.disabled = false; btn.textContent = '🗑️ ลบ';
+    }
+}
+
+// ==========================================
+// โหลดสถานะบ้านทั้งหมดจาก API
+// ==========================================
+async function loadHouseStatus() {
+    try {
+        const res = await fetch('/api/admin/line/status');
+        const result = await res.json();
+        if (result.status !== 'success') return;
+        renderHouseList(result.data);
+    } catch(e) {
+        document.getElementById('houseList').innerHTML =
+            '<div style="color:#e11d48;padding:16px">โหลดข้อมูลไม่ได้ กรุณา refresh</div>';
+    }
+}
+
+function renderHouseList(houses) {
+    const list = document.getElementById('houseList');
+    list.innerHTML = houses.map(h => `
+        <div>
+            <div class="house-row">
+                <div class="house-num">${h.house_number}</div>
+                <div class="house-name">
+                    ${h.house_name}
+                    <div class="status-row">
+                        ${h.has_line
+                            ? '<span class="badge badge-line">💬 LINE เชื่อมแล้ว</span>'
+                            : '<span class="badge badge-noline">💬 ยังไม่เชื่อม LINE</span>'
+                        }
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-shrink:0">
+                    ${h.has_line
+                        ? `<button class="btn-reset" onclick="resetLine('${h.house_number}', this)">🔄 Reset LINE</button>`
+                        : ''
+                    }
+                </div>
+            </div>
+            <div class="url-result" id="result-${h.house_number}">
+                <div class="url-label">URL สำหรับลูกบ้าน ${h.house_number}</div>
+                <div class="url-text" id="url-${h.house_number}"></div>
+                <div class="url-actions">
+                    <button class="btn-copy" onclick="copyUrl('${h.house_number}')">📋 คัดลอก</button>
+                    <a class="btn-open" id="open-${h.house_number}" href="#" target="_blank">🔗 เปิดทดสอบ</a>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ==========================================
+// สร้างลิ้งค์ (ใช้ตอน setup ครั้งแรก หรือ reset token)
+// ==========================================
+async function generateToken(houseNumber, btn) {
+    btn.disabled = true;
+    btn.textContent = 'กำลังสร้าง...';
+
+    try {
+        const res = await fetch('/api/admin/tokens/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ houseNumber })
+        });
+        const result = await res.json();
+
+        if (result.status === 'success') {
+            const url = result.data.url;
+            urls[houseNumber] = url;
+            document.getElementById(`url-${houseNumber}`).textContent = url;
+            document.getElementById(`open-${houseNumber}`).href = url;
+            document.getElementById(`result-${houseNumber}`).classList.add('show');
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + result.message);
+        }
+    } catch (e) {
+        alert('เชื่อมต่อ server ไม่ได้');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔗 สร้างลิ้งค์ใหม่';
+}
+
+// ==========================================
+// Reset LINE User ID ของบ้านนั้น
+// ==========================================
+async function resetLine(houseNumber, btn) {
+    if (!confirm(`ล้าง LINE บ้าน ${houseNumber} ?
+เจ้าของใหม่ต้องแอด LINE OA และพิมพ์เลขบ้านใหม่`)) return;
+    btn.disabled = true;
+    btn.textContent = 'กำลัง reset...';
+
+    try {
+        const res = await fetch('/api/admin/line/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ houseNumber })
+        });
+        const result = await res.json();
+        if (result.status === 'success') {
+            showToast(`✅ ล้าง LINE บ้าน ${houseNumber} แล้ว`);
+            await loadHouseStatus(); // reload list
+        } else {
+            alert('เกิดข้อผิดพลาด: ' + result.message);
+            btn.disabled = false;
+            btn.textContent = '🔄 Reset LINE';
+        }
+    } catch(e) {
+        alert('เชื่อมต่อ server ไม่ได้');
+        btn.disabled = false;
+        btn.textContent = '🔄 Reset LINE';
+    }
+}
+
+async function copyUrl(houseNumber) {
+    const url = urls[houseNumber];
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    const btn = event.target;
+    btn.textContent = '✅ คัดลอกแล้ว';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 คัดลอก'; btn.classList.remove('copied'); }, 2000);
+}
+
+function showToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:999';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+}
+
+// โหลดสถานะตอนเปิดหน้า
+window.addEventListener('DOMContentLoaded', () => {
+    loadHouseCrud();
+    loadHouseStatus();
+});
+</script>
+</body>
+</html>
