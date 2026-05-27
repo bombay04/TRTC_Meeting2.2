@@ -482,36 +482,56 @@ body {
 .ocr-result-row { display: flex; gap: 8px; font-size: 13px; margin-bottom: 4px; }
 .ocr-result-label { color: var(--text-dim); min-width: 70px; }
 .ocr-result-val { color: var(--text); font-weight: 600; }
-.ocr-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.btn-capture {
-    flex: 1; padding: 12px;
+/* OCR action buttons */
+.ocr-actions-initial {
+    display: flex; gap: 10px;
+}
+.ocr-actions-after {
+    display: none;
+    flex-direction: column; gap: 10px;
+}
+.ocr-actions-after.show { display: flex; }
+.ocr-actions-after-row { display: flex; gap: 10px; }
+
+.btn-capture-main {
+    flex: 1; padding: 13px;
     background: var(--accent); color: #fff;
     border: none; border-radius: 10px;
     font-family: 'Kanit', sans-serif;
-    font-size: 14px; font-weight: 700;
+    font-size: 15px; font-weight: 700;
     cursor: pointer; transition: all 0.2s;
 }
-.btn-capture:hover { filter: brightness(1.1); }
-.btn-capture:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-capture-main:hover { filter: brightness(1.1); }
+
 .btn-ocr-call {
-    flex: 1; padding: 12px;
+    flex: 1; padding: 13px;
     background: var(--green); color: #fff;
     border: none; border-radius: 10px;
     font-family: 'Kanit', sans-serif;
-    font-size: 14px; font-weight: 700;
+    font-size: 15px; font-weight: 700;
     cursor: pointer; transition: all 0.2s;
-    display: none;
 }
-.btn-ocr-call.show { display: block; }
 .btn-ocr-call:hover { filter: brightness(1.1); }
-.btn-ocr-skip {
-    width: 100%; padding: 10px;
-    background: transparent; color: var(--text-dim);
+
+.btn-ocr-retake {
+    flex: 1; padding: 13px;
+    background: transparent; color: var(--accent);
     border: 1px solid var(--border); border-radius: 10px;
     font-family: 'Kanit', sans-serif;
-    font-size: 13px; cursor: pointer; transition: all 0.2s;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
 }
-.btn-ocr-skip:hover { background: var(--border); }
+.btn-ocr-retake:hover { background: var(--border); }
+
+.btn-ocr-cancel {
+    width: 100%; padding: 11px;
+    background: transparent; color: var(--red);
+    border: 1px solid rgba(192,57,43,0.3); border-radius: 10px;
+    font-family: 'Kanit', sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+}
+.btn-ocr-cancel:hover { background: rgba(192,57,43,0.08); }
 </style>
 </head>
 <body>
@@ -577,12 +597,20 @@ body {
         <div class="ocr-result-row"><span class="ocr-result-label">เลขบัตร</span><span class="ocr-result-val" id="ocrIdNumber">—</span></div>
         <div class="ocr-result-row"><span class="ocr-result-label">วันเกิด</span><span class="ocr-result-val" id="ocrBirthDate">—</span></div>
     </div>
-    <div class="ocr-actions">
-        <button class="btn-capture" id="btnCapture" onclick="captureOcr()">📷 ถ่ายภาพ</button>
-        <button class="btn-ocr-call" id="btnOcrCall" onclick="confirmOcrAndCall()">📞 โทรเลย</button>
+    <!-- ก่อนถ่าย: ปุ่มถ่ายภาพ (เหมือนเดิม) -->
+    <div class="ocr-actions-initial" id="ocrActionsInitial">
+        <button class="btn-capture-main" id="btnCapture" onclick="captureOcr()">📷 ถ่ายภาพ</button>
     </div>
-    <br>
-    <button class="btn-ocr-skip" onclick="skipOcrAndCall()">ข้ามการสแกนบัตร — โทรเลย</button>
+    <button class="btn-ocr-cancel" id="btnCancelInitial" onclick="cancelOcrScan()" style="width:100%;margin-top:8px;">✕ ยกเลิกการสแกน</button>
+
+    <!-- หลังถ่ายเสร็จ: โทรเลย + ถ่ายใหม่ (บนสุด) แล้วยกเลิก (ล่าง) -->
+    <div class="ocr-actions-after" id="ocrActionsAfter">
+        <div class="ocr-actions-after-row">
+            <button class="btn-ocr-call" id="btnOcrCall" onclick="confirmOcrAndCall()">📞 โทรเลย</button>
+            <button class="btn-ocr-retake" id="btnRetake" onclick="retakeOcr()">🔄 ถ่ายใหม่</button>
+        </div>
+        <button class="btn-ocr-cancel" onclick="cancelOcrScan()">✕ ยกเลิกการสแกน</button>
+    </div>
   </div>
 </div>
 
@@ -592,7 +620,7 @@ body {
     <div class="call-box">
         <div class="call-title" id="callingTitle">กำลังโทรหา...</div>
         <div class="call-sub" id="callingSub">รอลูกบ้านรับสาย</div>
-        <button class="btn-cancel-call" onclick="cancelCall()">❌ ยกเลิกการโทร</button>
+        <button class="btn-cancel-call" onclick="cancelCall()">ยกเลิกการโทร</button>
     </div>
 </div>
 
@@ -611,7 +639,7 @@ body {
         <div class="incall-label">📷 CAMERA — ENTRANCE (กล้องของคุณ)</div>
     </div>
     <div class="incall-bar">
-        <button class="btn-endcall" onclick="endCall()">📵 วางสาย</button>
+        <button class="btn-endcall" onclick="endCall()">วางสาย</button>
     </div>
   </div>
 </div>
@@ -625,6 +653,7 @@ body {
 // State
 // ==========================================
 const socket = io();
+let _pendingVisitorHouse = null; // เก็บ houseNumber ที่รอ update roomCode ใน visitor_log
 let trtc = TRTC.create();
 let currentRoom = null;   // { roomCode, roomId, userId, sdkAppId, userSig, houseNumber }
 let callTimerInterval = null;
@@ -662,7 +691,9 @@ async function ringHouse(houseNumber) {
     ocrResult = null;
     // reset OCR UI
     document.getElementById('ocrResult').classList.remove('show');
-    document.getElementById('btnOcrCall').classList.remove('show');
+    document.getElementById('ocrActionsInitial').style.display = 'flex';
+    document.getElementById('btnCancelInitial').style.display = 'block';
+    document.getElementById('ocrActionsAfter').classList.remove('show');
     document.getElementById('btnCapture').disabled = false;
     document.getElementById('btnCapture').textContent = '📷 ถ่ายภาพ';
     document.getElementById('ocrSub').textContent = 'จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ';
@@ -692,7 +723,6 @@ async function captureOcr() {
     video.style.display = 'none';
 
     btn.disabled = true;
-    btn.textContent = '🔍 กำลังอ่านบัตร...';
     document.getElementById('ocrSub').textContent = 'กำลังประมวลผล OCR...';
 
     try {
@@ -710,34 +740,80 @@ async function captureOcr() {
                 document.getElementById('ocrIdNumber').textContent  = result.data.idNumber  || '—';
                 document.getElementById('ocrBirthDate').textContent = result.data.birthDate || '—';
                 document.getElementById('ocrResult').classList.add('show');
-                document.getElementById('btnOcrCall').classList.add('show');
-                document.getElementById('ocrSub').textContent = '✅ อ่านบัตรสำเร็จ — กด "โทรเลย" เพื่อดำเนินการต่อ';
+                document.getElementById('ocrActionsInitial').style.display = 'none';
+                document.getElementById('btnCancelInitial').style.display = 'none';
+                document.getElementById('ocrActionsAfter').classList.add('show');
+                document.getElementById('ocrSub').textContent = '✅ อ่านบัตรสำเร็จ กด "โทรเลย" เพื่อดำเนินการต่อ';
             } else {
-                document.getElementById('ocrSub').textContent = '⚠️ อ่านบัตรไม่ได้ — ลองใหม่หรือข้ามไปโทรเลย';
+                document.getElementById('ocrSub').textContent = '⚠️ อ่านบัตรไม่ได้ ลองถ่ายใหม่อีกครั้ง';
                 btn.disabled = false;
-                btn.textContent = '🔄 ถ่ายใหม่';
+                btn.textContent = '📷 ถ่ายภาพ';
                 video.style.display = 'block';
                 canvas.style.display = 'none';
             }
         }, 'image/jpeg', 0.9);
     } catch(e) {
-        document.getElementById('ocrSub').textContent = '❌ เกิดข้อผิดพลาด — ลองใหม่';
+        document.getElementById('ocrSub').textContent = '❌ เกิดข้อผิดพลาด ลองใหม่';
         btn.disabled = false;
-        btn.textContent = '🔄 ถ่ายใหม่';
+        btn.textContent = '📷 ถ่ายภาพ';
     }
 }
 
 // กดยืนยันหลัง OCR สำเร็จ → โทร
-function confirmOcrAndCall() {
+async function confirmOcrAndCall() {
     closeOcrOverlay();
+
+    // บันทึก visitor log ก่อนโทร เพื่อให้ลูกบ้านที่เปิดจาก push link เห็นข้อมูลด้วย
+    if (ocrResult && ocrHouseTarget) {
+        try {
+            await fetch('/api/visitor-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    houseNumber: ocrHouseTarget,
+                    roomCode: null, // ยังไม่มี roomCode ตอนนี้ — server จะ match ด้วย house + created_at ล่าสุด
+                    idNumber:  ocrResult.idNumber  || null,
+                    nameTh:    ocrResult.nameTh    || null,
+                    nameEn:    ocrResult.nameEn    || null,
+                    birthDate: ocrResult.birthDate || null,
+                    expDate:   ocrResult.expDate   || null,
+                    ocrRaw:    ocrResult.rawText    || null,
+                })
+            });
+        } catch(e) {
+            console.warn('visitor-log save failed:', e.message);
+        }
+    }
+
+    _pendingVisitorHouse = ocrHouseTarget; // เก็บไว้รอ update roomCode
     doRing(ocrHouseTarget, ocrResult);
 }
 
-// ข้ามการสแกน → โทรเลย
-function skipOcrAndCall() {
-    closeOcrOverlay();
-    doRing(ocrHouseTarget, null);
+// ถ่ายใหม่ — reset กลับไปหน้ากล้อง
+function retakeOcr() {
+    const video  = document.getElementById('ocrVideo');
+    const canvas = document.getElementById('ocrCanvas');
+    // ซ่อนผลเดิม + สลับปุ่ม
+    document.getElementById('ocrResult').classList.remove('show');
+    document.getElementById('ocrActionsInitial').style.display = 'flex';
+    document.getElementById('btnCancelInitial').style.display = 'block';
+    document.getElementById('ocrActionsAfter').classList.remove('show');
+    // รีเซ็ต UI กลับไปหน้ากล้อง
+    canvas.style.display = 'none';
+    video.style.display  = 'block';
+    document.getElementById('btnCapture').disabled    = false;
+    document.getElementById('btnCapture').textContent = '📷 ถ่ายภาพ';
+    document.getElementById('ocrSub').textContent     = 'จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ';
+    ocrResult = null;
 }
+
+// ยกเลิกการสแกน → ปิด overlay กลับหน้าเลือกบ้าน
+function cancelOcrScan() {
+    closeOcrOverlay();
+    ocrHouseTarget = null;
+    ocrResult = null;
+}
+
 
 function closeOcrOverlay() {
     document.getElementById('ocrOverlay').classList.remove('active');
@@ -756,13 +832,38 @@ function doRing(houseNumber, visitorInfo) {
     document.getElementById('callingTitle').textContent = `กำลังโทรหา บ้าน ${houseNumber}`;
     document.getElementById('callingSub').textContent = 'รอลูกบ้านรับสาย...';
     document.getElementById('callingOverlay').classList.add('active');
-    socket.emit('ring', { houseNumber, visitorInfo });
+    // ส่งเฉพาะ field ที่ใช้จริง — ตัด rawText ออกเพราะข้อมูลใหญ่เกินไป
+    const payload = visitorInfo ? {
+        nameTh:    visitorInfo.nameTh    || null,
+        nameEn:    visitorInfo.nameEn    || null,
+        idNumber:  visitorInfo.idNumber  || null,
+        birthDate: visitorInfo.birthDate || null,
+    } : null;
+    socket.emit('ring', { houseNumber, visitorInfo: payload });
 }
 
 // ── Server: room created → wait for accept ──
-socket.on('room_created', (data) => {
+socket.on('room_created', async (data) => {
     currentRoom = data;
     console.log('Room created, waiting for resident...', data.roomCode);
+
+    // อัปเดต room_code ใน visitor_logs ที่เพิ่งบันทึกไป
+    if (_pendingVisitorHouse) {
+        try {
+            await fetch('/api/visitor-log/update-room', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    houseNumber: _pendingVisitorHouse,
+                    roomCode: data.roomCode
+                })
+            });
+            console.log('✅ visitor_log room_code updated:', data.roomCode);
+        } catch(e) {
+            console.warn('visitor-log update failed:', e.message);
+        }
+        _pendingVisitorHouse = null;
+    }
 });
 
 // ── ลูกบ้าน offline แต่ส่ง push แล้ว → แจ้งให้ไรเดอร์ทราบ ถือสายรอต่อ ──
