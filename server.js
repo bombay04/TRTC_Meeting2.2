@@ -12,7 +12,7 @@ const { Client, validateSignature, messagingApi } = require('@line/bot-sdk');
 
 // ==========================================
 // LINE Messaging API Init
-// ==========================================
+// ==========================================  
 const lineConfig = {
     channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
     channelSecret: process.env.LINE_CHANNEL_SECRET,
@@ -595,29 +595,6 @@ app.post('/api/visitor-log', async (req, res) => {
     }
 });
 
-
-// PATCH /api/visitor-log/update-room — อัปเดต room_code หลังได้ roomCode จาก server
-app.post('/api/visitor-log/update-room', async (req, res) => {
-    const { houseNumber, roomCode } = req.body;
-    if (!houseNumber || !roomCode)
-        return res.status(400).json({ status: 'error', message: 'missing params' });
-    try {
-        // อัปเดต record ล่าสุดของบ้านนี้ที่ยังไม่มี room_code
-        await pool.query(
-            `UPDATE visitor_logs SET room_code = $1
-             WHERE id = (
-                 SELECT id FROM visitor_logs
-                 WHERE house_number = $2 AND room_code IS NULL
-                 ORDER BY created_at DESC LIMIT 1
-             )`,
-            [roomCode, houseNumber]
-        );
-        res.json({ status: 'success' });
-    } catch (err) {
-        res.status(500).json({ status: 'error', message: err.message });
-    }
-});
-
 // GET /api/visitor-logs — ดูประวัติผู้มาติดต่อ (Admin)
 app.get('/api/visitor-logs', async (req, res) => {
     const { house, limit = 50 } = req.query;
@@ -825,6 +802,15 @@ io.on('connection', (socket) => {
 
         const baseUrl     = process.env.APP_URL || `http://localhost:${process.env.PORT || 3001}`;
         const residentUrl = `${baseUrl}/resident.html?house=${houseNumber}&token=${houseUrlToken}&room=${roomCode}`;
+
+        // ── save visitor_log พร้อม roomCode ทันที ก่อนส่ง LINE ──
+        if (visitorInfo?.idNumber || visitorInfo?.nameEn) {
+            pool.query(
+                `INSERT INTO visitor_logs (house_number, room_code, id_number, name_en, ocr_raw)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [houseNumber, roomCode, visitorInfo.idNumber || null, visitorInfo.nameEn || null, visitorInfo.ocrRaw || null]
+            ).catch(e => console.warn('visitor_log insert failed:', e.message));
+        }
 
         // ── ส่ง LINE ทุกครั้ง (ไม่ว่าจะ online/offline) ──
         // เพราะลูกบ้านอาจเปิดไลน์อยู่แทนที่จะเปิดหน้าเว็บ

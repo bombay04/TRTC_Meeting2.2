@@ -456,20 +456,12 @@ body {
         <div class="visitor-info" id="visitorInfoBox">
             <div class="visitor-info-title">🪪 ข้อมูลผู้มาติดต่อ</div>
             <div class="visitor-info-row">
-                <span class="visitor-info-label">ชื่อ (ไทย)</span>
-                <span class="visitor-info-val" id="viNameTh">—</span>
-            </div>
-            <div class="visitor-info-row">
-                <span class="visitor-info-label">ชื่อ (Eng)</span>
-                <span class="visitor-info-val" id="viNameEn">—</span>
-            </div>
-            <div class="visitor-info-row">
                 <span class="visitor-info-label">เลขบัตร</span>
                 <span class="visitor-info-val" id="viIdNumber">—</span>
             </div>
             <div class="visitor-info-row">
-                <span class="visitor-info-label">วันเกิด</span>
-                <span class="visitor-info-val" id="viBirthDate">—</span>
+                <span class="visitor-info-label">ชื่อ (Eng)</span>
+                <span class="visitor-info-val" id="viNameEn">—</span>
             </div>
         </div>
 
@@ -725,20 +717,16 @@ function showVisitorInfo(visitorInfo) {
     const box = document.getElementById('visitorInfoBox');
     if (!visitorInfo) { box.classList.remove('show'); return; }
 
-    const nameTh    = visitorInfo.nameTh    || visitorInfo.name_th    || '';
-    const nameEn    = visitorInfo.nameEn    || visitorInfo.name_en    || '';
-    const idNumber  = visitorInfo.idNumber  || visitorInfo.id_number  || '';
-    const birthDate = visitorInfo.birthDate || visitorInfo.birth_date || '';
+    const nameEn   = visitorInfo.nameEn   || visitorInfo.name_en   || '';
+    const idNumber = visitorInfo.idNumber || visitorInfo.id_number || '';
 
     // ซ่อนถ้าไม่มีข้อมูลเลยสักช่อง
-    if (!nameTh && !nameEn && !idNumber && !birthDate) {
+    if (!nameEn && !idNumber) {
         box.classList.remove('show'); return;
     }
 
-    document.getElementById('viNameTh').textContent    = nameTh    || '—';
-    document.getElementById('viNameEn').textContent    = nameEn    || '—';
-    document.getElementById('viIdNumber').textContent  = idNumber  || '—';
-    document.getElementById('viBirthDate').textContent = birthDate || '—';
+    document.getElementById('viIdNumber').textContent = idNumber || '—';
+    document.getElementById('viNameEn').textContent   = nameEn   || '—';
     box.classList.add('show');
 }
 

@@ -592,10 +592,8 @@ body {
         </div>
     </div>
     <div class="ocr-result" id="ocrResult">
-        <div class="ocr-result-row"><span class="ocr-result-label">ชื่อ (ไทย)</span><span class="ocr-result-val" id="ocrNameTh">—</span></div>
-        <div class="ocr-result-row"><span class="ocr-result-label">ชื่อ (Eng)</span><span class="ocr-result-val" id="ocrNameEn">—</span></div>
         <div class="ocr-result-row"><span class="ocr-result-label">เลขบัตร</span><span class="ocr-result-val" id="ocrIdNumber">—</span></div>
-        <div class="ocr-result-row"><span class="ocr-result-label">วันเกิด</span><span class="ocr-result-val" id="ocrBirthDate">—</span></div>
+        <div class="ocr-result-row"><span class="ocr-result-label">ชื่อ (Eng)</span><span class="ocr-result-val" id="ocrNameEn">—</span></div>
     </div>
     <!-- ก่อนถ่าย: ปุ่มถ่ายภาพ (เหมือนเดิม) -->
     <div class="ocr-actions-initial" id="ocrActionsInitial">
@@ -653,7 +651,6 @@ body {
 // State
 // ==========================================
 const socket = io();
-let _pendingVisitorHouse = null; // เก็บ houseNumber ที่รอ update roomCode ใน visitor_log
 let trtc = TRTC.create();
 let currentRoom = null;   // { roomCode, roomId, userId, sdkAppId, userSig, houseNumber }
 let callTimerInterval = null;
@@ -735,10 +732,8 @@ async function captureOcr() {
             if (result.status === 'success' && result.data) {
                 ocrResult = result.data;
                 // แสดงผล
-                document.getElementById('ocrNameTh').textContent    = result.data.nameTh    || '—';
-                document.getElementById('ocrNameEn').textContent    = result.data.nameEn    || '—';
-                document.getElementById('ocrIdNumber').textContent  = result.data.idNumber  || '—';
-                document.getElementById('ocrBirthDate').textContent = result.data.birthDate || '—';
+                document.getElementById('ocrIdNumber').textContent = result.data.idNumber || '—';
+                document.getElementById('ocrNameEn').textContent   = result.data.nameEn   || '—';
                 document.getElementById('ocrResult').classList.add('show');
                 document.getElementById('ocrActionsInitial').style.display = 'none';
                 document.getElementById('btnCancelInitial').style.display = 'none';
@@ -771,13 +766,10 @@ async function confirmOcrAndCall() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     houseNumber: ocrHouseTarget,
-                    roomCode: null, // ยังไม่มี roomCode ตอนนี้ — server จะ match ด้วย house + created_at ล่าสุด
-                    idNumber:  ocrResult.idNumber  || null,
-                    nameTh:    ocrResult.nameTh    || null,
-                    nameEn:    ocrResult.nameEn    || null,
-                    birthDate: ocrResult.birthDate || null,
-                    expDate:   ocrResult.expDate   || null,
-                    ocrRaw:    ocrResult.rawText    || null,
+                    roomCode: null,
+                    idNumber: ocrResult.idNumber || null,
+                    nameEn:   ocrResult.nameEn   || null,
+                    ocrRaw:   ocrResult.rawText  || null,
                 })
             });
         } catch(e) {
@@ -785,7 +777,6 @@ async function confirmOcrAndCall() {
         }
     }
 
-    _pendingVisitorHouse = ocrHouseTarget; // เก็บไว้รอ update roomCode
     doRing(ocrHouseTarget, ocrResult);
 }
 
@@ -832,38 +823,18 @@ function doRing(houseNumber, visitorInfo) {
     document.getElementById('callingTitle').textContent = `กำลังโทรหา บ้าน ${houseNumber}`;
     document.getElementById('callingSub').textContent = 'รอลูกบ้านรับสาย...';
     document.getElementById('callingOverlay').classList.add('active');
-    // ส่งเฉพาะ field ที่ใช้จริง — ตัด rawText ออกเพราะข้อมูลใหญ่เกินไป
     const payload = visitorInfo ? {
-        nameTh:    visitorInfo.nameTh    || null,
-        nameEn:    visitorInfo.nameEn    || null,
-        idNumber:  visitorInfo.idNumber  || null,
-        birthDate: visitorInfo.birthDate || null,
+        idNumber: visitorInfo.idNumber || null,
+        nameEn:   visitorInfo.nameEn   || null,
+        ocrRaw:   visitorInfo.rawText  || null,
     } : null;
     socket.emit('ring', { houseNumber, visitorInfo: payload });
 }
 
 // ── Server: room created → wait for accept ──
-socket.on('room_created', async (data) => {
+socket.on('room_created', (data) => {
     currentRoom = data;
     console.log('Room created, waiting for resident...', data.roomCode);
-
-    // อัปเดต room_code ใน visitor_logs ที่เพิ่งบันทึกไป
-    if (_pendingVisitorHouse) {
-        try {
-            await fetch('/api/visitor-log/update-room', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    houseNumber: _pendingVisitorHouse,
-                    roomCode: data.roomCode
-                })
-            });
-            console.log('✅ visitor_log room_code updated:', data.roomCode);
-        } catch(e) {
-            console.warn('visitor-log update failed:', e.message);
-        }
-        _pendingVisitorHouse = null;
-    }
 });
 
 // ── ลูกบ้าน offline แต่ส่ง push แล้ว → แจ้งให้ไรเดอร์ทราบ ถือสายรอต่อ ──
