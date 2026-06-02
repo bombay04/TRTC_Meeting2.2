@@ -456,12 +456,24 @@ body {
         <div class="visitor-info" id="visitorInfoBox">
             <div class="visitor-info-title">🪪 ข้อมูลผู้มาติดต่อ</div>
             <div class="visitor-info-row">
-                <span class="visitor-info-label">เลขบัตร</span>
-                <span class="visitor-info-val" id="viIdNumber">—</span>
+                <span class="visitor-info-label">ประเภทบัตร</span>
+                <span class="visitor-info-val" id="viCardType">—</span>
+            </div>
+            <div class="visitor-info-row">
+                <span class="visitor-info-label">ชื่อ (ไทย)</span>
+                <span class="visitor-info-val" id="viNameTh">—</span>
             </div>
             <div class="visitor-info-row">
                 <span class="visitor-info-label">ชื่อ (Eng)</span>
                 <span class="visitor-info-val" id="viNameEn">—</span>
+            </div>
+            <div class="visitor-info-row">
+                <span class="visitor-info-label">เลขบัตร</span>
+                <span class="visitor-info-val" id="viIdNumber">—</span>
+            </div>
+            <div class="visitor-info-row">
+                <span class="visitor-info-label">วันเกิด</span>
+                <span class="visitor-info-val" id="viBirthDate">—</span>
             </div>
         </div>
 
@@ -492,17 +504,13 @@ body {
             <div class="big-icon">📷</div>
             <div>รอสัญญาณวิดีโอจากกล้อง...</div>
         </div>
-        <div class="remote-label">📷 CAM-01 · ENTRANCE</div>
-        <div class="video-hud">
-            🔒 ระบบรักษาความปลอดภัย
-        </div>
     </div>
 
     <div class="incall-bar">
         <div>
             <div class="note-status"></div>
         </div>
-        <button class="btn-hangup" onclick="hangUp()">📵 วางสาย</button>
+        <button class="btn-hangup" onclick="hangUp()">วางสาย</button>
     </div>
   </div>
 </div>
@@ -693,7 +701,7 @@ async function loadPendingCall(house, token, roomCode) {
             } catch(e) {}
         } else {
             // room หมดอายุแล้ว (ไรเดอร์กดยกเลิกไปแล้ว)
-            showToast('⚠️ สายหมดอายุแล้ว — ไรเดอร์อาจยกเลิกไปแล้ว');
+            showToast('⚠️ สายหมดอายุแล้ว ไรเดอร์อาจยกเลิกไปแล้ว');
         }
     } catch(e) {
         console.error('loadPendingCall error:', e);
@@ -717,16 +725,20 @@ function showVisitorInfo(visitorInfo) {
     const box = document.getElementById('visitorInfoBox');
     if (!visitorInfo) { box.classList.remove('show'); return; }
 
-    const nameEn   = visitorInfo.nameEn   || visitorInfo.name_en   || '';
-    const idNumber = visitorInfo.idNumber || visitorInfo.id_number || '';
+    // รองรับทั้ง camelCase (socket) และ snake_case (DB)
+    const cardType  = visitorInfo.cardType  || visitorInfo.card_type  || '';
+    const nameTh    = visitorInfo.nameTh    || visitorInfo.name_th    || '';
+    const nameEn    = visitorInfo.nameEn    || visitorInfo.name_en    || '';
+    const idNumber  = visitorInfo.idNumber  || visitorInfo.id_number  || '';
+    const birthDate = visitorInfo.birthDate || visitorInfo.birth_date || '';
 
-    // ซ่อนถ้าไม่มีข้อมูลเลยสักช่อง
-    if (!nameEn && !idNumber) {
-        box.classList.remove('show'); return;
-    }
+    if (!nameTh && !nameEn && !idNumber) { box.classList.remove('show'); return; }
 
-    document.getElementById('viIdNumber').textContent = idNumber || '—';
-    document.getElementById('viNameEn').textContent   = nameEn   || '—';
+    document.getElementById('viCardType').textContent  = cardType  || '—';
+    document.getElementById('viNameTh').textContent    = nameTh    || '—';
+    document.getElementById('viNameEn').textContent    = nameEn    || '—';
+    document.getElementById('viIdNumber').textContent  = idNumber  || '—';
+    document.getElementById('viBirthDate').textContent = birthDate || '—';
     box.classList.add('show');
 }
 
@@ -854,9 +866,9 @@ socket.on('call_accepted', ({ roomCode, startAt }) => {
 // ── Call ended from server ──
 socket.on('call_ended', async ({ reason }) => {
     const msgs = {
-        rejected: '❌ ปฏิเสธสาย',
-        hangup: '📵 วางสายแล้ว',
-        timeout: '⏱️ วางสายอัตโนมัติ'
+        rejected: 'ปฏิเสธสาย',
+        hangup: 'วางสายแล้ว',
+        timeout: 'วางสายอัตโนมัติ'
     };
     await cleanupCall();
     showToast(msgs[reason] || 'สายหลุด');

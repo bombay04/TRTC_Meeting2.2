@@ -133,11 +133,10 @@ function parseThaiIdCard(text) {
     }
 
     // ── ชื่อภาษาอังกฤษ (ชื่อ + นามสกุล) ──
-    // บัตรประชาชนไทย: "Mr. Firstname" อยู่บรรทัดนึง "Last name Lastname" อยู่อีกบรรทัด
     let firstName = null;
     let lastName  = null;
 
-    // หา Mr./Mrs./Miss ที่อาจมี noise นำหน้า เช่น "Meme Mr. Supakot"
+    // 1) บัตรประชาชน: "Mr. Firstname" / "Mrs." / "Miss"
     for (let i = 0; i < lines.length; i++) {
         const mFirstInLine = lines[i].match(/((?:Mr\.?|Mrs\.?|Miss|Ms\.?)\s+[A-Za-z][a-zA-Z\s]*)/i);
         if (mFirstInLine) {
@@ -159,12 +158,31 @@ function parseThaiIdCard(text) {
     } else if (firstName) {
         nameEn = firstName;
     } else {
-        // fallback: หา Title Case ธรรมดา
-        const skip = /^(Thai|National|ID|Card|Date|Birth|Issue|Expiry|Address|Religion|Last|Name|Thal)/i;
+        // 2) ใบขับขี่/บัตรอื่น: บรรทัดที่ขึ้นต้นด้วย "Name " ตามด้วยตัวอักษรพิมพ์ใหญ่
         for (const line of lines) {
-            const m = line.match(/^([A-Z][a-z]{1,15}(?:\s+[A-Z][a-z]{1,15}){1,3})$/);
-            if (m && !skip.test(m[1])) { nameEn = m[1]; break; }
+            const mName = line.match(/^Name\s+([A-Z][A-Za-z\s]{2,50})$/i);
+            if (mName) { nameEn = mName[1].trim(); break; }
         }
+        // 3) fallback: Title Case ธรรมดา
+        if (!nameEn) {
+            const skip = /^(Thai|National|ID|Card|Date|Birth|Issue|Expiry|Address|Religion|Last|Name|Thal|Kingdom|Private|Driving|Licence|Temporary)/i;
+            for (const line of lines) {
+                const m = line.match(/^([A-Z][a-z]{1,15}(?:\s+[A-Z][a-z]{1,15}){1,3})$/);
+                if (m && !skip.test(m[1])) { nameEn = m[1]; break; }
+            }
+        }
+    }
+
+    // ── ประเภทบัตร ──
+    let cardType = 'ไม่ระบุประเภท';
+    if (/passport|หนังสือเดินทาง/i.test(full)) {
+        cardType = 'หนังสือเดินทาง';
+    } else if (/ใบอนุญาตขับร|driving licen/i.test(full)) {
+        cardType = 'ใบอนุญาตขับขี่';
+    } else if (/ประจำตัวประชาชน|national id|thai national/i.test(full)) {
+        cardType = 'บัตรประจำตัวประชาชน';
+    } else if (idNumber && idNumber.length === 13) {
+        cardType = 'บัตรประจำตัวประชาชน';
     }
 
     // ── วันเกิด ──
@@ -192,7 +210,7 @@ function parseThaiIdCard(text) {
         if (m) { expDate = m[1].trim(); break; }
     }
 
-    return { idNumber, nameTh, nameEn, birthDate, expDate, rawText: text };
+    return { idNumber, nameTh, nameEn, birthDate, expDate, cardType, rawText: text };
 }
 
 // ==========================================
@@ -308,6 +326,7 @@ const initDb = async () => {
         // migrate columns
         await pool.query(`ALTER TABLE house_tokens ADD COLUMN IF NOT EXISTS fcm_token TEXT;`);
         await pool.query(`ALTER TABLE house_tokens ADD COLUMN IF NOT EXISTS line_user_id VARCHAR(50);`);
+        await pool.query(`ALTER TABLE visitor_logs ADD COLUMN IF NOT EXISTS card_type VARCHAR(50);`);
         // ตาราง visitor_logs สำหรับเก็บประวัติการเข้า-ออก + ข้อมูล OCR
         await pool.query(`
             CREATE TABLE IF NOT EXISTS visitor_logs (
@@ -494,10 +513,17 @@ app.get('/api/pending-call', async (req, res) => {
         const r = roomResult.rows[0];
         // ดึง visitor info ถ้ามี
         const visitorResult = await pool.query(
-            'SELECT id_number, name_th, name_en, birth_date FROM visitor_logs WHERE room_code = $1 ORDER BY created_at DESC LIMIT 1',
+            'SELECT id_number, name_th, name_en, birth_date, card_type FROM visitor_logs WHERE room_code = $1 ORDER BY created_at DESC LIMIT 1',
             [room]
         );
-        const visitorInfo = visitorResult.rows[0] || null;
+        const vRow = visitorResult.rows[0];
+        const visitorInfo = vRow ? {
+            idNumber:  vRow.id_number  || null,
+            nameTh:    vRow.name_th    || null,
+            nameEn:    vRow.name_en    || null,
+            birthDate: vRow.birth_date || null,
+            cardType:  vRow.card_type  || null,
+        } : null;
         res.json({
             status: 'success',
             data: {
@@ -804,11 +830,17 @@ io.on('connection', (socket) => {
         const residentUrl = `${baseUrl}/resident.html?house=${houseNumber}&token=${houseUrlToken}&room=${roomCode}`;
 
         // ── save visitor_log พร้อม roomCode ทันที ก่อนส่ง LINE ──
-        if (visitorInfo?.idNumber || visitorInfo?.nameEn) {
+        if (visitorInfo?.idNumber || visitorInfo?.nameTh || visitorInfo?.nameEn) {
             pool.query(
-                `INSERT INTO visitor_logs (house_number, room_code, id_number, name_en, ocr_raw)
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [houseNumber, roomCode, visitorInfo.idNumber || null, visitorInfo.nameEn || null, visitorInfo.ocrRaw || null]
+                `INSERT INTO visitor_logs (house_number, room_code, id_number, name_th, name_en, birth_date, card_type, ocr_raw)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [houseNumber, roomCode,
+                 visitorInfo.idNumber  || null,
+                 visitorInfo.nameTh    || null,
+                 visitorInfo.nameEn    || null,
+                 visitorInfo.birthDate || null,
+                 visitorInfo.cardType  || null,
+                 visitorInfo.rawText   || null]
             ).catch(e => console.warn('visitor_log insert failed:', e.message));
         }
 

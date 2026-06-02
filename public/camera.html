@@ -442,10 +442,14 @@ body {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 20px;
-    padding: 28px 32px;
-    width: 100%; max-width: 460px;
+    padding: 24px 28px;
+    width: 100%; max-width: 820px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
+.ocr-body { display: flex; gap: 20px; align-items: flex-start; }
+.ocr-left  { flex: 1; min-width: 0; }
+.ocr-right { width: 210px; flex-shrink: 0; display: none; }
+.ocr-right.show { display: block; }
 .ocr-title { font-size: 17px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
 .ocr-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; }
 .ocr-preview {
@@ -476,12 +480,15 @@ body {
 .ocr-result {
     background: #f8fafc; border: 1px solid #e2e8f0;
     border-radius: 10px; padding: 14px 16px;
-    margin-bottom: 16px; display: none;
+    display: block;
 }
-.ocr-result.show { display: block; }
-.ocr-result-row { display: flex; gap: 8px; font-size: 13px; margin-bottom: 4px; }
-.ocr-result-label { color: var(--text-dim); min-width: 70px; }
-.ocr-result-val { color: var(--text); font-weight: 600; }
+.ocr-result-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--text-dim); margin-bottom: 10px;
+}
+.ocr-result-row { display: flex; flex-direction: column; font-size: 12px; margin-bottom: 8px; }
+.ocr-result-label { color: var(--text-dim); font-size: 11px; margin-bottom: 2px; }
+.ocr-result-val { color: var(--text); font-weight: 600; font-size: 13px; word-break: break-all; }
 /* OCR action buttons */
 .ocr-actions-initial {
     display: flex; gap: 10px;
@@ -582,32 +589,42 @@ body {
 <!-- OCR OVERLAY -->
 <div class="ocr-overlay" id="ocrOverlay">
   <div class="ocr-card">
-    <div class="ocr-title">🪪 สแกนบัตรประชาชน</div>
+    <div class="ocr-title">🪪 สแกนบัตร</div>
     <div class="ocr-sub" id="ocrSub">จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ</div>
-    <div class="ocr-preview">
-        <video id="ocrVideo" autoplay playsinline muted></video>
-        <canvas id="ocrCanvas"></canvas>
-        <div class="ocr-guide">
-            <div class="ocr-guide-text">จัดบัตรให้อยู่ในกรอบ</div>
+    <div class="ocr-body">
+      <!-- ซ้าย: กล้อง + ปุ่ม -->
+      <div class="ocr-left">
+        <div class="ocr-preview">
+            <video id="ocrVideo" autoplay playsinline muted></video>
+            <canvas id="ocrCanvas"></canvas>
+            <div class="ocr-guide">
+                <div class="ocr-guide-text">จัดบัตรให้อยู่ในกรอบ</div>
+            </div>
         </div>
-    </div>
-    <div class="ocr-result" id="ocrResult">
-        <div class="ocr-result-row"><span class="ocr-result-label">เลขบัตร</span><span class="ocr-result-val" id="ocrIdNumber">—</span></div>
-        <div class="ocr-result-row"><span class="ocr-result-label">ชื่อ (Eng)</span><span class="ocr-result-val" id="ocrNameEn">—</span></div>
-    </div>
-    <!-- ก่อนถ่าย: ปุ่มถ่ายภาพ (เหมือนเดิม) -->
-    <div class="ocr-actions-initial" id="ocrActionsInitial">
-        <button class="btn-capture-main" id="btnCapture" onclick="captureOcr()">📷 ถ่ายภาพ</button>
-    </div>
-    <button class="btn-ocr-cancel" id="btnCancelInitial" onclick="cancelOcrScan()" style="width:100%;margin-top:8px;">✕ ยกเลิกการสแกน</button>
-
-    <!-- หลังถ่ายเสร็จ: โทรเลย + ถ่ายใหม่ (บนสุด) แล้วยกเลิก (ล่าง) -->
-    <div class="ocr-actions-after" id="ocrActionsAfter">
-        <div class="ocr-actions-after-row">
-            <button class="btn-ocr-call" id="btnOcrCall" onclick="confirmOcrAndCall()">📞 โทรเลย</button>
-            <button class="btn-ocr-retake" id="btnRetake" onclick="retakeOcr()">🔄 ถ่ายใหม่</button>
+        <!-- ก่อนถ่าย -->
+        <div class="ocr-actions-initial" id="ocrActionsInitial" style="margin-top:12px;">
+            <button class="btn-capture-main" id="btnCapture" onclick="captureOcr()">ถ่ายภาพ</button>
         </div>
-        <button class="btn-ocr-cancel" onclick="cancelOcrScan()">✕ ยกเลิกการสแกน</button>
+        <button class="btn-ocr-cancel" id="btnCancelInitial" onclick="cancelOcrScan()" style="width:100%;margin-top:8px;">✕ ยกเลิกการสแกน</button>
+        <!-- หลังถ่ายเสร็จ -->
+        <div class="ocr-actions-after" id="ocrActionsAfter" style="margin-top:12px;">
+            <div class="ocr-actions-after-row">
+                <button class="btn-ocr-call" id="btnOcrCall" onclick="confirmOcrAndCall()">โทรเลย</button>
+                <button class="btn-ocr-retake" id="btnRetake" onclick="retakeOcr()">ถ่ายใหม่</button>
+            </div>
+            <button class="btn-ocr-cancel" onclick="cancelOcrScan()">✕ ยกเลิกการสแกน</button>
+        </div>
+      </div>
+      <!-- ขวา: ข้อมูลบัตร (โผล่หลังถ่ายเสร็จ) -->
+      <div class="ocr-right" id="ocrRight">
+        <div class="ocr-result" id="ocrResult">
+            <div class="ocr-result-title">🪪 ข้อมูลบัตร</div>
+            <div class="ocr-result-row"><span class="ocr-result-label">ประเภทบัตร</span><span class="ocr-result-val" id="ocrCardType">—</span></div>
+            <div class="ocr-result-row"><span class="ocr-result-label">ชื่อ (ไทย)</span><span class="ocr-result-val" id="ocrNameTh">—</span></div>
+            <div class="ocr-result-row"><span class="ocr-result-label">ชื่อ (Eng)</span><span class="ocr-result-val" id="ocrNameEn">—</span></div>
+            <div class="ocr-result-row"><span class="ocr-result-label">เลขบัตร</span><span class="ocr-result-val" id="ocrIdNumber">—</span></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -687,12 +704,12 @@ async function ringHouse(houseNumber) {
     ocrHouseTarget = houseNumber;
     ocrResult = null;
     // reset OCR UI
-    document.getElementById('ocrResult').classList.remove('show');
+    document.getElementById('ocrRight').classList.remove('show');
     document.getElementById('ocrActionsInitial').style.display = 'flex';
     document.getElementById('btnCancelInitial').style.display = 'block';
     document.getElementById('ocrActionsAfter').classList.remove('show');
     document.getElementById('btnCapture').disabled = false;
-    document.getElementById('btnCapture').textContent = '📷 ถ่ายภาพ';
+    document.getElementById('btnCapture').textContent = 'ถ่ายภาพ';
     document.getElementById('ocrSub').textContent = 'จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ';
     document.getElementById('ocrCanvas').style.display = 'none';
     // เปิดกล้องสำหรับสแกนบัตร
@@ -731,10 +748,13 @@ async function captureOcr() {
 
             if (result.status === 'success' && result.data) {
                 ocrResult = result.data;
-                // แสดงผล
-                document.getElementById('ocrIdNumber').textContent = result.data.idNumber || '—';
+                // แสดงข้อมูลทางขวา (cardType, nameTh, nameEn มาจาก server)
+                document.getElementById('ocrCardType').textContent = result.data.cardType  || 'ไม่ระบุประเภท';
+                document.getElementById('ocrNameTh').textContent   = result.data.nameTh   || '—';
                 document.getElementById('ocrNameEn').textContent   = result.data.nameEn   || '—';
+                document.getElementById('ocrIdNumber').textContent = result.data.idNumber || '—';
                 document.getElementById('ocrResult').classList.add('show');
+                document.getElementById('ocrRight').classList.add('show');
                 document.getElementById('ocrActionsInitial').style.display = 'none';
                 document.getElementById('btnCancelInitial').style.display = 'none';
                 document.getElementById('ocrActionsAfter').classList.add('show');
@@ -742,7 +762,7 @@ async function captureOcr() {
             } else {
                 document.getElementById('ocrSub').textContent = '⚠️ อ่านบัตรไม่ได้ ลองถ่ายใหม่อีกครั้ง';
                 btn.disabled = false;
-                btn.textContent = '📷 ถ่ายภาพ';
+                btn.textContent = 'ถ่ายภาพ';
                 video.style.display = 'block';
                 canvas.style.display = 'none';
             }
@@ -750,7 +770,7 @@ async function captureOcr() {
     } catch(e) {
         document.getElementById('ocrSub').textContent = '❌ เกิดข้อผิดพลาด ลองใหม่';
         btn.disabled = false;
-        btn.textContent = '📷 ถ่ายภาพ';
+        btn.textContent = 'ถ่ายภาพ';
     }
 }
 
@@ -767,9 +787,12 @@ async function confirmOcrAndCall() {
                 body: JSON.stringify({
                     houseNumber: ocrHouseTarget,
                     roomCode: null,
-                    idNumber: ocrResult.idNumber || null,
-                    nameEn:   ocrResult.nameEn   || null,
-                    ocrRaw:   ocrResult.rawText  || null,
+                    idNumber:  ocrResult.idNumber  || null,
+                    nameTh:    ocrResult.nameTh    || null,
+                    nameEn:    ocrResult.nameEn    || null,
+                    birthDate: ocrResult.birthDate || null,
+                    cardType:  ocrResult.cardType  || null,
+                    ocrRaw:    ocrResult.rawText   || null,
                 })
             });
         } catch(e) {
@@ -785,7 +808,7 @@ function retakeOcr() {
     const video  = document.getElementById('ocrVideo');
     const canvas = document.getElementById('ocrCanvas');
     // ซ่อนผลเดิม + สลับปุ่ม
-    document.getElementById('ocrResult').classList.remove('show');
+    document.getElementById('ocrRight').classList.remove('show');
     document.getElementById('ocrActionsInitial').style.display = 'flex';
     document.getElementById('btnCancelInitial').style.display = 'block';
     document.getElementById('ocrActionsAfter').classList.remove('show');
@@ -793,7 +816,7 @@ function retakeOcr() {
     canvas.style.display = 'none';
     video.style.display  = 'block';
     document.getElementById('btnCapture').disabled    = false;
-    document.getElementById('btnCapture').textContent = '📷 ถ่ายภาพ';
+    document.getElementById('btnCapture').textContent = 'ถ่ายภาพ';
     document.getElementById('ocrSub').textContent     = 'จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ';
     ocrResult = null;
 }
@@ -824,9 +847,11 @@ function doRing(houseNumber, visitorInfo) {
     document.getElementById('callingSub').textContent = 'รอลูกบ้านรับสาย...';
     document.getElementById('callingOverlay').classList.add('active');
     const payload = visitorInfo ? {
-        idNumber: visitorInfo.idNumber || null,
-        nameEn:   visitorInfo.nameEn   || null,
-        ocrRaw:   visitorInfo.rawText  || null,
+        nameTh:    visitorInfo.nameTh    || null,
+        nameEn:    visitorInfo.nameEn    || null,
+        idNumber:  visitorInfo.idNumber  || null,
+        birthDate: visitorInfo.birthDate || null,
+        cardType:  visitorInfo.cardType  || null,
     } : null;
     socket.emit('ring', { houseNumber, visitorInfo: payload });
 }
@@ -879,7 +904,7 @@ async function cancelCall() {
 
 // ── Call ended (by resident or timeout) ──
 socket.on('call_ended', ({ reason }) => {
-    const msgs = { rejected: '❌ ลูกบ้านปฏิเสธสาย', hangup: '📵 วางสายแล้ว', timeout: '⏱️ หมดเวลาอัตโนมัติ' };
+    const msgs = { rejected: '❌ ลูกบ้านปฏิเสธสาย', hangup: 'วางสายแล้ว', timeout: 'หมดเวลาอัตโนมัติ' };
     handleCallEnd(msgs[reason] || 'สายหลุด');
 });
 
