@@ -64,9 +64,10 @@ const sendLineMessage = async (lineUserId, houseNumber, residentUrl, visitorInfo
 };
 
 // ==========================================
-// Google Cloud Vision OCR (documentTextDetection)
+// Google Cloud Vision OCR + Speech-to-Text
 // ==========================================
 const vision = require('@google-cloud/vision');
+const speech = require('@google-cloud/speech');
 const multer  = require('multer');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -77,6 +78,33 @@ const visionClient = new vision.ImageAnnotatorClient({
     },
     projectId: process.env.GOOGLE_PROJECT_ID,
 });
+
+const speechClient = new speech.SpeechClient({
+    credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    },
+    projectId: process.env.GOOGLE_PROJECT_ID,
+});
+
+function parseHouseNumber(text) {
+    if (!text) return null;
+    const cleaned = text.trim().toLowerCase();
+    const digits = cleaned.match(/\d{2,4}/);
+    if (digits) return digits[0];
+
+    const wordMap = {
+        'ศูนย์': '0', 'เลขศูนย์': '0', 'หนึ่ง': '1', 'เอ็ด': '1', 'สอง': '2', 'ยี่': '2', 'สาม': '3',
+        'สี่': '4', 'ห้า': '5', 'หก': '6', 'เจ็ด': '7', 'แปด': '8', 'เก้า': '9',
+        'หนึ่ง': '1', 'สอง': '2', 'สาม': '3', 'สี่': '4', 'ห้า': '5', 'หก': '6', 'เจ็ด': '7', 'แปด': '8', 'เก้า': '9'
+    };
+    let transformed = cleaned;
+    Object.keys(wordMap).forEach(word => {
+        transformed = transformed.split(word).join(wordMap[word]);
+    });
+    const numeric = transformed.match(/\d{2,4}/);
+    return numeric ? numeric[0] : null;
+}
 
 // Parse ข้อมูลบัตรประชาชนไทยจาก OCR text (Tesseract-friendly)
 function parseThaiIdCard(text) {
@@ -327,6 +355,7 @@ const initDb = async () => {
         await pool.query(`ALTER TABLE house_tokens ADD COLUMN IF NOT EXISTS fcm_token TEXT;`);
         await pool.query(`ALTER TABLE house_tokens ADD COLUMN IF NOT EXISTS line_user_id VARCHAR(50);`);
         await pool.query(`ALTER TABLE visitor_logs ADD COLUMN IF NOT EXISTS card_type VARCHAR(50);`);
+        await pool.query(`ALTER TABLE visitor_logs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;`);
         // ตาราง visitor_logs สำหรับเก็บประวัติการเข้า-ออก + ข้อมูล OCR
         await pool.query(`
             CREATE TABLE IF NOT EXISTS visitor_logs (
@@ -340,7 +369,9 @@ const initDb = async () => {
                 exp_date VARCHAR(30),
                 ocr_raw TEXT,
                 photo_url TEXT,
+                card_type VARCHAR(50),
                 status VARCHAR(20) DEFAULT 'pending',
+                completed_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -603,6 +634,52 @@ app.post('/api/ocr', upload.single('photo'), async (req, res) => {
     } catch (err) {
         console.error('OCR error:', err.message);
         res.status(500).json({ status: 'error', message: 'OCR ล้มเหลว: ' + err.message });
+    }
+});
+
+app.post('/api/speech-to-text', upload.single('audio'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ status: 'error', message: 'ไม่พบไฟล์เสียง' });
+    try {
+        const audioBytes = req.file.buffer.toString('base64');
+        const [response] = await speechClient.recognize({
+            config: {
+                encoding: 'WEBM_OPUS',
+                sampleRateHertz: 48000,
+                languageCode: 'th-TH',
+                enableAutomaticPunctuation: false,
+            },
+            audio: { content: audioBytes }
+        });
+        const transcript = response.results.map(r => r.alternatives[0]?.transcript || '').join(' ').trim();
+        const houseNumber = parseHouseNumber(transcript);
+        res.json({ status: 'success', data: { transcript, houseNumber } });
+    } catch (err) {
+        console.error('Speech-to-text error:', err.message);
+        res.status(500).json({ status: 'error', message: 'Speech-to-text ล้มเหลว: ' + err.message });
+    }
+});
+
+app.post('/api/exit-scan', async (req, res) => {
+    const { idNumber } = req.body;
+    if (!idNumber) return res.status(400).json({ status: 'error', message: 'idNumber required' });
+    try {
+        const result = await pool.query(
+            `SELECT id, house_number FROM visitor_logs
+             WHERE id_number = $1 AND status = 'pending'
+             ORDER BY created_at DESC LIMIT 1`,
+            [idNumber]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ status: 'error', message: 'คุณสแกนออกเรียบร้อยแล้ว' });
+        }
+        const log = result.rows[0];
+        await pool.query(
+            `UPDATE visitor_logs SET status = 'completed', completed_at = NOW() WHERE id = $1`,
+            [log.id]
+        );
+        res.json({ status: 'success', data: { logId: log.id, houseNumber: log.house_number } });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
     }
 });
 
