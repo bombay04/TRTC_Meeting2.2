@@ -83,10 +83,16 @@
 
         .preview video,
         .preview canvas {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+
+        .preview canvas.hidden {
+            display: none;
         }
 
         .preview .overlay {
@@ -219,11 +225,13 @@
         let exitStream = null;
         let autoScanTimer = null;
 
+        let toastTimer = null;
         function showToast(message, duration = 5000) {
             const toast = document.getElementById('exitToast');
+            if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
             toast.textContent = message;
             toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), duration);
+            toastTimer = setTimeout(() => { toast.classList.remove('show'); toastTimer = null; }, duration);
         }
 
         async function startPreview() {
@@ -264,8 +272,12 @@
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, width, height);
+
+            // หยุด stream ทันทีเพื่อ freeze ภาพไว้
+            exitStream.getTracks().forEach(t => t.stop());
+            exitStream = null;
+
             canvas.classList.remove('hidden');
-            video.classList.add('hidden');
             showToast('กำลังถ่ายภาพบัตร...', 3500);
             processExitImage();
         }
@@ -296,7 +308,7 @@
                     const completeJson = await completeRes.json();
                     if (completeJson.status === 'success') {
                         retryButton.classList.add('hidden');
-                        showToast(`ขอบคุณค่ะ เดินทางปลอดภัย\n`, 6000);
+                        showToast(`ขอบคุณค่ะ เดินทางปลอดภัย\n`, 5000);
                         resetAfterSuccess();
                     } else {
                         showFailure(completeJson.message || 'ไม่พบรายการ pending');
@@ -315,10 +327,9 @@
             }
             setTimeout(() => {
                 canvas.classList.add('hidden');
-                video.classList.remove('hidden');
-                // return to manual capture mode
                 if (captureButton) captureButton.disabled = false;
-            }, 3500);
+                startPreview();
+            }, 5000);
         }
 
         function showFailure(message) {
@@ -332,9 +343,9 @@
             retryButton.classList.add('hidden');
             captureButton.classList.remove('hidden');
             captureButton.disabled = false;
-            video.classList.remove('hidden');
             canvas.classList.add('hidden');
-            showToast('พร้อมแล้ว กด "ถ่ายภาพ" เพื่อสแกนอีกครั้ง', 3000);
+            showToast('กำลังเปิดกล้องใหม่...', 2000);
+            startPreview();
         }
 
         window.addEventListener('DOMContentLoaded', startPreview);
