@@ -308,7 +308,7 @@
                     const completeJson = await completeRes.json();
                     if (completeJson.status === 'success') {
                         retryButton.classList.add('hidden');
-                        showToast(`ขอบคุณค่ะ เดินทางปลอดภัย\n`, 5000);
+                        showToast(`ขอบคุณค่ะ เดินทางปลอดภัย\n`, 3000);
                         resetAfterSuccess();
                     } else {
                         showFailure(completeJson.message || 'ไม่พบรายการ pending');
@@ -329,7 +329,7 @@
                 canvas.classList.add('hidden');
                 if (captureButton) captureButton.disabled = false;
                 startPreview();
-            }, 5000);
+            }, 3000);
         }
 
         function showFailure(message) {

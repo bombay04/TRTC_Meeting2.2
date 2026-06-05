@@ -180,6 +180,55 @@ function parseThaiIdCard(text) {
         }
     }
 
+    if (!lastName) {
+        for (let i = 0; i < lines.length; i++) {
+            const label = lines[i].trim();
+            if (/Surname|Family\s*name|Last\s*name|Lastname|นามสกุล|Sum\w*/i.test(label)) {
+                const sameLineMatch = label.match(/(?:Surname|Family\s*name|Last\s*name|Lastname|Sum\w*)[:\/]\s*([A-Za-z][A-Za-z\s<-]{2,})/i);
+                if (sameLineMatch) {
+                    lastName = sameLineMatch[1].replace(/<+/g, ' ').trim();
+                    break;
+                }
+                for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+                    const candidate = lines[j].trim();
+                    const upperMatch = candidate.match(/([A-Z][A-Z-]+(?:\s+[A-Z][A-Z-]+)*)/);
+                    if (upperMatch) {
+                        lastName = upperMatch[1].replace(/<+/g, ' ').trim();
+                        break;
+                    }
+                    if (/^[A-Z][A-Z\s<-]{2,}$/.test(candidate.replace(/<+/g, ' '))) {
+                        lastName = candidate.replace(/<+/g, ' ').trim();
+                        break;
+                    }
+                    if (/^[A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+)*$/.test(candidate) && !/^(Name|Date|Birth|Nationality|Sex|Place|Authority)/i.test(candidate)) {
+                        lastName = candidate;
+                        break;
+                    }
+                }
+                if (lastName) break;
+            }
+            if (/Title\s*\/\s*Name/i.test(label) && i > 0) {
+                const candidate = lines[i - 1].trim();
+                if (/^[A-Z][A-Z\s<-]{2,}$/.test(candidate.replace(/<+/g, ' '))) {
+                    lastName = candidate.replace(/<+/g, ' ').trim();
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!lastName) {
+        for (const line of lines) {
+            if (line.includes('<<')) {
+                const candidate = line.split('<<')[0].replace(/<+/g, ' ').trim();
+                if (/^[A-Z][A-Z\s]+$/.test(candidate) && candidate.length > 3) {
+                    lastName = candidate;
+                    break;
+                }
+            }
+        }
+    }
+
     let nameEn = null;
     if (firstName && lastName) {
         nameEn = `${firstName} ${lastName}`;
@@ -199,6 +248,11 @@ function parseThaiIdCard(text) {
                 if (m && !skip.test(m[1])) { nameEn = m[1]; break; }
             }
         }
+    }
+
+    if (!lastName && nameEn && nameEn.trim().includes(' ') && !/^(Mr\.?|Mrs\.?|Miss|Ms\.?)/i.test(nameEn.trim())) {
+        const parts = nameEn.trim().split(/\s+/);
+        lastName = parts[parts.length - 1];
     }
 
     // ── ประเภทบัตร ──
@@ -238,7 +292,7 @@ function parseThaiIdCard(text) {
         if (m) { expDate = m[1].trim(); break; }
     }
 
-    return { idNumber, nameTh, nameEn, birthDate, expDate, cardType, rawText: text };
+    return { idNumber, nameTh, nameEn, lastName, birthDate, expDate, cardType, rawText: text };
 }
 
 // ==========================================
@@ -473,7 +527,7 @@ app.delete('/api/admin/houses/:id', async (req, res) => {
         const result = await pool.query('DELETE FROM houses WHERE house_number = $1', [houseNumber]);
         if (result.rowCount === 0)
             return res.status(404).json({ status: 'error', message: 'ไม่พบบ้านนี้' });
-        console.log(`🗑️ ลบบ้าน ${houseNumber}`);
+        console.log(`ลบบ้าน ${houseNumber}`);
         res.json({ status: 'success' });
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });

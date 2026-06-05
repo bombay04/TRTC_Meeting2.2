@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin — จัดการ Token</title>
+<title>จัดการบ้านเลขที่</title>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -199,11 +199,11 @@ h1 {
 </head>
 <body>
 <div class="container">
-    <h1>🏘️ Admin — Village Guard</h1>
+    <h1>Admin Village Guard</h1>
     <div class="sub">จัดการบ้านเลขที่ และ LINE User ID ของลูกบ้าน</div>
 
     <!-- ── CRUD บ้าน ── -->
-    <div class="section-title">🏠 จัดการบ้านเลขที่</div>
+    <div class="section-title">จัดการบ้านเลขที่</div>
     <div class="card">
         <div class="card-title">เพิ่มบ้านใหม่</div>
         <div class="add-house-form">
@@ -218,7 +218,7 @@ h1 {
     </div>
 
     <!-- ── LINE Status ── -->
-    <div class="section-title" style="margin-top:8px;">💬 จัดการ LINE User ID</div>
+    <div class="section-title" style="margin-top:8px;">จัดการ LINE User ID</div>
     <div class="warn">
         ⚠️ เมื่อกด "Reset LINE" ระบบจะลบ LINE User ID ของบ้านนั้นออกทันที เจ้าของบ้านต้องแอด LINE OA และพิมพ์เลขบ้านใหม่เพื่อเชื่อมต่ออีกครั้ง
     </div>
@@ -260,7 +260,7 @@ function renderHouseCrud(houses) {
         <div class="house-row">
             <div class="house-num">${h.house_number}</div>
             <div class="house-name">${h.house_name}</div>
-            <button class="btn-delete" onclick="deleteHouse('${h.house_number}', this)">🗑️ ลบ</button>
+            <button class="btn-delete" onclick="deleteHouse('${h.house_number}', this)">ลบ</button>
         </div>
     `).join('');
 }
@@ -307,11 +307,11 @@ async function deleteHouse(houseNumber, btn) {
             await loadHouseStatus();
         } else {
             showToast('⚠️ ' + result.message);
-            btn.disabled = false; btn.textContent = '🗑️ ลบ';
+            btn.disabled = false; btn.textContent = 'ลบ';
         }
     } catch(e) {
         showToast('❌ เชื่อมต่อ server ไม่ได้');
-        btn.disabled = false; btn.textContent = '🗑️ ลบ';
+        btn.disabled = false; btn.textContent = 'ลบ';
     }
 }
 
