@@ -257,6 +257,29 @@ body {
 }
 .call-overlay.active { display: flex; }
 
+/* Confirmation modal for voice-detected house number */
+.confirm-modal {
+    position: fixed; inset: 0;
+    background: rgba(30,35,45,0.7);
+    backdrop-filter: blur(6px);
+    z-index: 220;
+    display: none; align-items: center; justify-content: center;
+}
+.confirm-modal.active { display: flex; }
+.confirm-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 26px;
+    text-align: center;
+    min-width: 320px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+}
+.confirm-house-number { font-family: 'Share Tech Mono', monospace; font-size: 28px; color: var(--accent); margin: 8px 0 12px; }
+.confirm-actions { display:flex; gap:12px; justify-content:center; margin-top:12px; }
+.btn-confirm-yes { padding:10px 18px; background: var(--green); color:#fff; border:none; border-radius:10px; cursor:pointer; font-weight:700; }
+.btn-confirm-no  { padding:10px 18px; background:transparent; color:var(--red); border:1px solid rgba(192,57,43,0.2); border-radius:10px; cursor:pointer; }
+
 .call-box {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -688,6 +711,19 @@ body {
     </div>
   </div>
 </div>
+ 
+<!-- Confirmation modal for voice input -->
+<div class="confirm-modal" id="confirmVoiceModal">
+    <div class="confirm-box">
+        <div class="call-title">ยืนยันหมายเลขบ้าน</div>
+        <div class="call-sub">ต้องการติดต่อบ้านเลขที่</div>
+        <div class="confirm-house-number" id="confirmHouseNumber">—</div>
+        <div class="confirm-actions">
+            <button class="btn-confirm-yes" id="confirmYesBtn" onclick="confirmVoiceContact()">ยืนยัน</button>
+            <button class="btn-confirm-no" id="confirmNoBtn" onclick="cancelVoiceContact()">ยกเลิก</button>
+        </div>
+    </div>
+</div>
 
 <!-- CALLING OVERLAY -->
 <div class="call-overlay" id="callingOverlay">
@@ -796,13 +832,14 @@ async function sendSpeechBlob(chunks) {
     try {
         const res = await fetch('/api/speech-to-text', { method: 'POST', body: form });
         const json = await res.json();
-        if (json.status === 'success' && json.data) {
+            if (json.status === 'success' && json.data) {
             const transcription = json.data.transcript || 'ไม่พบคำพูด';
             const houseNumber = json.data.houseNumber;
             if (houseNumber) {
                 updateVoiceStatus(`ได้บ้าน ${houseNumber}`);
                 showToast(`ได้เลขบ้าน ${houseNumber}`);
-                setTimeout(() => ringHouse(houseNumber), 300);
+                // Show confirmation modal so rider can confirm the detected number
+                showConfirmHouse(houseNumber);
             } else {
                 updateVoiceStatus(`ไม่พบเลขบ้าน: ${transcription}`);
                 showToast('ไม่พบเลขบ้านจากเสียง');
@@ -1255,6 +1292,40 @@ function showToast(msg) {
     t.textContent = msg;
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3001);
+}
+
+// Confirmation modal helpers for voice-detected house number
+function showConfirmHouse(houseNumber) {
+    const modal = document.getElementById('confirmVoiceModal');
+    const numEl = document.getElementById('confirmHouseNumber');
+    if (numEl) numEl.textContent = houseNumber;
+    // store temporarily so confirm handler can read it
+    modal.dataset.houseNumber = houseNumber;
+    modal.classList.add('active');
+    updateVoiceStatus('ยืนยันหมายเลขบ้าน');
+}
+
+function hideConfirmHouse() {
+    const modal = document.getElementById('confirmVoiceModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    delete modal.dataset.houseNumber;
+}
+
+function confirmVoiceContact() {
+    const modal = document.getElementById('confirmVoiceModal');
+    const hn = modal && modal.dataset ? modal.dataset.houseNumber : null;
+    hideConfirmHouse();
+    if (hn) {
+        // proceed to ring the house
+        ringHouse(hn);
+    }
+}
+
+function cancelVoiceContact() {
+    hideConfirmHouse();
+    updateVoiceStatus('ยกเลิกการติดต่อ');
+    showToast('ยกเลิกหมายเลขบ้านจากเสียง');
 }
 
 // ==========================================
