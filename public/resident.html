@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ลูกบ้าน — รับสายวิดีโอ</title>
+<title>สายเรียกเข้า</title>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -386,31 +386,6 @@ body {
 }
 .toast.show { opacity: 1; }
 
-.btn-notify {
-    padding: 12px 28px;
-    background: #2563eb;
-    color: #fff;
-    border: none; border-radius: 10px;
-    font-family: 'Kanit', sans-serif;
-    font-size: 15px; font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 10px rgba(37,99,235,0.3);
-    animation: pulse-btn 2s ease-in-out infinite;
-}
-.btn-notify:hover { background: #1d4ed8; transform: translateY(-1px); }
-@keyframes pulse-btn {
-    0%,100% { box-shadow: 0 2px 10px rgba(37,99,235,0.3); }
-    50%      { box-shadow: 0 4px 20px rgba(37,99,235,0.6); }
-}
-.notify-granted {
-    display: flex; align-items: center; gap: 8px;
-    background: rgba(46,125,79,0.1);
-    border: 1px solid rgba(46,125,79,0.3);
-    border-radius: 20px;
-    padding: 8px 18px;
-    font-size: 13px; color: #2e7d4f;
-}
 </style>
 </head>
 <body>
@@ -420,7 +395,7 @@ body {
     <div class="idle-icon" id="idleIcon">🔐</div>
     <div>
         <div class="idle-title" id="idleTitle">กำลังตรวจสอบสิทธิ์...</div>
-        <div class="idle-sub" id="idleSub">Village Guard — Resident Terminal</div>
+        
     </div>
 
     <!-- Error state (แสดงเมื่อ token ไม่ถูกต้อง) -->
@@ -434,10 +409,7 @@ body {
     </div>
 
     <!-- ปุ่มขอสิทธิ์ notification — แสดงหลัง verify token สำเร็จ -->
-    <button class="btn-notify" id="btnNotify" onclick="requestNotificationPermission()" style="display:none;">
-        🔔 เปิดรับการแจ้งเตือน
-    </button>
-
+    
     <div class="online-badge" id="onlineBadge">
         <div class="online-dot"></div>
         <span id="onlineText">รอรับสาย...</span>
@@ -519,88 +491,7 @@ body {
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://web.sdk.qcloud.com/trtc/webrtc/v5/dist/trtc.js"></script>
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <script>
-// ==========================================
-// Firebase Init
-// ==========================================
-firebase.initializeApp({
-    apiKey: "AIzaSyDiOzGY6GDE0qJaDdW5KNE4qSFlg_wHWnE",
-    authDomain: "village-guard.firebaseapp.com",
-    projectId: "village-guard",
-    storageBucket: "village-guard.firebasestorage.app",
-    messagingSenderId: "785165712870",
-    appId: "1:785165712870:web:ea0b0f8408448fe88e2a27"
-});
-const messaging = firebase.messaging();
-const VAPID_KEY = 'BCDaBnX018YGgYKlfGtywF4oZWQ4iERso8OqhQ5-inWIDIQuoy4WDPqXm324qtjAYKyxwslXNQODzkoM0eJFLcg';
-
-// เก็บ house/token ไว้ใช้ตอนขอสิทธิ์
-let _fcmHouse = null, _fcmToken = null;
-
-async function setupPushNotification(house, token) {
-    _fcmHouse = house;
-    _fcmToken = token;
-
-    // ลงทะเบียน Service Worker ก่อนเลย
-    try {
-        await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        console.log('✅ Service Worker registered');
-    } catch(e) { console.error('SW error:', e); }
-
-    // ตรวจสอบสิทธิ์ปัจจุบัน
-    const permission = Notification.permission;
-    if (permission === 'granted') {
-        // มีสิทธิ์แล้ว — บันทึก FCM token เลย
-        await saveFcmToken();
-    } else if (permission === 'denied') {
-        // ถูกบล็อกแล้ว — แจ้งให้ไปแก้ใน browser settings
-        showToast('⚠️ Notification ถูกบล็อก กรุณาเปิดใน Settings ของ browser');
-    } else {
-        // ยังไม่ได้ขอ — แสดงปุ่มให้กด
-        document.getElementById('btnNotify').style.display = 'inline-flex';
-    }
-}
-
-async function requestNotificationPermission() {
-    const btn = document.getElementById('btnNotify');
-    btn.textContent = '⏳ กำลังขอสิทธิ์...';
-    btn.disabled = true;
-
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-        btn.style.display = 'none';
-        await saveFcmToken();
-        // แสดง badge ว่าเปิดแล้ว
-        const badge = document.createElement('div');
-        badge.className = 'notify-granted';
-        badge.textContent = '🔔 เปิดรับการแจ้งเตือนแล้ว';
-        document.getElementById('onlineBadge').insertAdjacentElement('beforebegin', badge);
-    } else {
-        btn.textContent = '🔔 เปิดรับการแจ้งเตือน';
-        btn.disabled = false;
-        showToast('⚠️ กรุณาอนุญาต notification เพื่อรับสายตอนปิด browser');
-    }
-}
-
-async function saveFcmToken() {
-    try {
-        const reg = await navigator.serviceWorker.ready;
-        const fcmToken = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-        if (!fcmToken) return;
-        await fetch('/api/save-fcm-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ house: _fcmHouse, token: _fcmToken, fcmToken })
-        });
-        console.log('✅ FCM Token saved');
-        messaging.onMessage((payload) => { console.log('Foreground msg:', payload); });
-    } catch(err) { console.error('FCM save error:', err); }
-}
-
-// ==========================================
 // State
 // ==========================================
 const socket = io();
@@ -641,7 +532,7 @@ async function verifyTokenAndRegister() {
 
         document.getElementById('idleIcon').textContent = '🏠';
         document.getElementById('idleTitle').textContent = houseName;
-        document.getElementById('idleSub').textContent = 'Village Guard — Resident Terminal';
+        
 
         socket.emit('register_resident', { houseNumber: myHouseNumber });
 
@@ -653,9 +544,6 @@ async function verifyTokenAndRegister() {
                 console.log('🎤 Mic permission granted in advance');
             })
             .catch(err => console.warn('🎤 Mic permission denied:', err.message));
-
-        // ขอสิทธิ์ push notification และบันทึก FCM token
-        setupPushNotification(house, token);
 
         const badge = document.getElementById('onlineBadge');
         badge.style.display = 'flex';

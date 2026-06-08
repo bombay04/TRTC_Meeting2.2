@@ -1,0 +1,255 @@
+สถาปัตยกรรมระบบ Village Security Intercom
+
+1. ภาพรวมระบบ
+----------------
+ระบบนี้เป็นแอปพลิเคชันกล้องหน้าหมู่บ้านที่ใช้ Node.js + Express เป็น backend และ HTML/JS ฝั่ง client สำหรับไรเดอร์ที่มาหากริ่งบ้าน
+- Backend: server.js
+- Frontend: public/camera.html (camera/voice/OCR + call UI)
+- Storage: PostgreSQL
+- Realtime signaling: Socket.IO
+- Video/audio call: Tencent TRTC WebRTC SDK
+- OCR / Speech-to-text: Google Cloud Vision + Speech
+- Messaging: LINE Messaging API + Firebase Cloud Messaging
+
+2. ส่วนประกอบหลัก
+----------------
+2.1 server.js
+- สร้างเซิร์ฟเวอร์ Express และ Socket.IO
+- โหลด config จาก .env
+- เชื่อม PostgreSQL ด้วย pg
+- กำหนด API สำหรับบ้าน, token, OCR, speech, visitor log, status
+- เชื่อม Google Cloud Vision และ Speech
+- เชื่อม Firebase Admin เพื่อส่ง push notification
+- เชื่อม LINE bot SDK สำหรับแจ้งเตือนลูกบ้านผ่าน LINE
+- จัดการ socket events สำหรับการโทรผ่านห้อง TRTC
+
+2.2 public/camera.html
+- หน้า UI ของกล้องหน้าหมู่บ้าน
+- โหลดรายการบ้านจาก /api/houses
+- มีปุ่มบ้านแต่ละหลังให้กดโทร
+- มีปุ่มสั่งงานด้วยเสียงเพื่อบอกเลขบ้าน
+- มี overlay สแกนบัตรประชาชนด้วยกล้อง
+- มีระบบร้องเรียน/ยกเลิกการโทร
+- เชื่อม Socket.IO เพื่อรับ event สถานะการโทรจาก server
+- ใช้ TRTC SDK เพื่อเข้าออกห้องวิดีโอคอล
+
+2.3 ฐานข้อมูล PostgreSQL
+- houses: เก็บรายการบ้านและชื่อบ้าน
+- rooms: เก็บ session ห้อง TRTC / สายโทร
+- house_tokens: เก็บ token สำหรับลิงก์ resident, FCM token, LINE user id
+- visitor_logs: เก็บประวัติผู้มาติดต่อ + OCR ข้อมูลบัตร + สถานะ
+
+3. การไหลของข้อมูลหลัก
+----------------
+3.1 โหลดรายการบ้าน
+- client camera.html เรียก GET /api/houses
+- server อ่านจากตาราง houses แล้วส่งกลับ
+- หน้า UI สร้างปุ่มบ้านพร้อมสถานะ READY
+
+3.2 กดโทรหาบ้านจากปุ่ม
+- ฟังก์ชัน ringHouse(houseNumber) ใน camera.html
+  - เปิด overlay OCR และรอให้ผู้ใช้ถ่ายรูปบัตร
+  - ถ้าเปิดกล้องไม่ได้ จะข้ามไปโทรทันที
+
+3.3 สแกน OCR
+- ฟังก์ชัน captureOcr() ถ่ายภาพจาก video
+- ส่งภาพขึ้น POST /api/ocr
+- server.js ใช้ visionClient.documentTextDetection
+- ได้ rawText แล้ว parseThaiIdCard(rawText)
+- ส่งข้อมูลกลับฝั่ง client
+- client แสดงผล cardType, nameTh, nameEn, idNumber
+
+3.4 บันทึก visitor log
+- เมื่อยืนยัน OCR แล้ว confirmOcrAndCall()
+- call /api/visitor-log เพื่อบันทึกข้อมูลผู้มาติดต่อ
+- payload มี houseNumber, idNumber, nameTh, nameEn, birthDate, expDate, cardType, ocrRaw
+- server จะใส่ข้อมูลลงตาราง visitor_logs
+
+3.5 โทรตามหาบ้าน
+- ฟังก์ชัน doRing(houseNumber, visitorInfo)
+- สร้าง payload visitorInfo จาก OCR result
+- socket.emit('ring', { houseNumber, visitorInfo })
+
+3.6 Server side ring flow
+- socket.on('ring') ใน server.js
+  - สร้าง roomCode และ numericRoomId
+  - สร้าง TRTC userId / userSig สำหรับกล้องและลูกบ้าน
+  - บันทึกห้องลงตาราง rooms
+  - ดึงข้อมูล house_tokens ของบ้านนั้น
+  - สร้าง residentUrl ที่มี house/token/room
+  - บันทึก visitor_logs ซ้ำอีกครั้ง (fire-and-forget)
+  - ส่ง LINE message ถ้ามี line_user_id
+  - ส่ง FCM push ถ้ามี fcm_token
+  - ส่ง socket event incoming_call ถ้าลูกบ้านเปิดหน้าเว็บ resident อยู่
+  - เริ่ม timer รอรับสาย และแจ้ง camera ว่าห้องถูกสร้าง
+
+3.7 ลูกบ้านกดรับสาย
+- ลูบ้านเข้าหน้า resident.html ด้วย token และ room
+- เมื่อ resident  เชื่อมต่อ socket และกดรับ
+- server จะรับ event accept_call
+- server ส่ง call_accepted กลับไปยัง client camera
+- camera แสดง in-call overlay และเข้า TRTC room
+
+3.8 เข้า TRTC room
+- ฟังก์ชัน enterRoom(startAt)
+  - ใช้ currentRoom data: sdkAppId, userId, userSig, roomId
+  - trtc.enterRoom(...) เพื่อเข้าห้อง
+  - trtc.startLocalVideo() และ startLocalAudio()
+  - Remote audio จะสตาร์ทเมื่อ EVENT.REMOTE_AUDIO_AVAILABLE มา
+
+3.9 จบสาย
+- client camera ส่ง socket.emit('end_call') หรือ server auto timeout
+- server ส่ง call_ended ไปทุก client
+- camera จะ stop TRTC, clear timer, reset UI
+
+4. ฟังก์ชันสำคัญใน server.js
+----------------
+4.1 sendLineMessage(lineUserId, houseNumber, residentUrl, visitorInfo)
+- สร้าง LINE flex message
+- ส่งไปยัง lineUserId ของลูกบ้าน
+- ข้อความจะมีลิงก์ให้กดรับสาย
+
+4.2 parseHouseNumber(text)
+- ใช้ regex หาตัวเลข 2-4 หลัก
+- ถ้าไม่เจอ จะ mapping คำไทยเลขบ้านเป็นตัวเลข
+- คืน houseNumber หรือ null
+
+4.3 parseThaiIdCard(text)
+- รับ raw OCR text จาก Google Vision
+- แยกบรรทัดและรวมข้อความทั้งหมด
+- หาเลขบัตร 13 หลัก
+- ดึงชื่อ-สกุลภาษาไทยจาก pattern คำไทย
+- ดึงชื่อภาษาอังกฤษจาก pattern "Mr./Mrs./Miss" หรือบรรทัด Title Case
+- เดิน match ข้อความชื่อ / Surname / Family name / Last name
+- detect cardType: passport, driving license, ID card
+- detect birthDate และ expDate
+- คืน object { idNumber, nameTh, nameEn, lastName, birthDate, expDate, cardType, rawText }
+
+4.4 sendPushNotification(fcmToken, houseNumber, residentUrl)
+- ส่ง Web Push ผ่าน Firebase Admin
+- ใส่ link ไปหน้า resident พร้อม room
+
+4.5 waitForDb() / initDb()
+- รอเชื่อม DB ก่อนเริ่ม
+- สร้างตาราง houses, rooms, house_tokens, visitor_logs
+- สร้างค่าตัวอย่างบ้าน 101-103
+
+4.6 API ชั้นอื่น
+- GET /api/houses: คืนรายการบ้าน
+- POST /api/admin/houses: เพิ่มบ้านใหม่
+- DELETE /api/admin/houses/:id: ลบบ้าน
+- POST /api/admin/tokens/generate: สร้าง token สำหรับ resident link
+- GET /api/verify-token: ตรวจ token ใน resident URL
+- GET /api/pending-call: ดึงข้อมูลสายที่รอรับ
+- POST /api/save-fcm-token: เก็บ FCM token ของ resident
+- POST /api/get-credentials: คืน TRTC userSig ให้ client
+- GET /api/status: ตรวจสุขภาพระบบ
+- POST /api/ocr: รับภาพบัตร → Google Vision → parse → ส่งผล
+- POST /api/speech-to-text: รับไฟล์เสียง → Google Speech → ถอดคำ → หาเลขบ้าน
+- POST /api/visitor-log: บันทึก visitor log
+- GET /api/visitor-logs: ดึงประวัติ visitor
+- POST /api/exit-scan: ปิดสถานะ visitor ที่ออกแล้ว
+- LINE webhook: ลงทะเบียน LINE user id ให้บ้าน
+
+5. ฟังก์ชันสำคัญใน public/camera.html
+----------------
+5.1 updateVoiceStatus(text)
+- อัปเดตสถานะแสดงผลด้านบน
+
+5.2 startSpeechRecognition()
+- ขอ permission ไมโครโฟน
+- ใช้ MediaRecorder บันทึกเสียง 3 วินาที
+- ส่งไฟล์ให้ server ถอดเสียง
+
+5.3 sendSpeechBlob(chunks)
+- สร้าง Blob จาก chunks
+- POST /api/speech-to-text
+- ถ้า server คืนเลขบ้าน จะเรียก showConfirmHouse(houseNumber)
+- ถ้าไม่เจอ จะโชว์ toast แจ้งว่าไม่พบ
+
+5.4 showConfirmHouse(houseNumber)
+- แสดง modal ยืนยันก่อนโทร
+- เก็บ houseNumber ไว้ใน data attribute
+
+5.5 confirmVoiceContact()
+- เมื่อ rider กดยืนยัน modal
+- เรียก ringHouse(houseNumber)
+
+5.6 cancelVoiceContact()
+- เมื่อ rider ยกเลิก modal
+- ปิด modal และกลับสถานะเสียง
+
+5.7 ringHouse(houseNumber)
+- ตั้ง ocrHouseTarget
+- รีเซ็ต UI overlay OCR
+- ขอ video จากกล้องหลัง
+- ถ้าเปิดกล้องไม่สำเร็จ จะ skipOcrAndCall()
+
+5.8 captureOcr()
+- ถ่ายภาพจาก video ไปยัง canvas
+- ส่งภาพ POST /api/ocr
+- รับผล OCR แล้วแสดงด้านขวา
+- เปิดปุ่ม "โทรเลย"
+
+5.9 confirmOcrAndCall()
+- ปิด overlay OCR
+- บันทึก visitor log via /api/visitor-log
+- เรียก doRing(houseNumber, ocrResult)
+
+5.10 doRing(houseNumber, visitorInfo)
+- เปลี่ยนปุ่มบ้านเป็นสถานะ calling
+- แสดง overlay รอสาย
+- socket.emit('ring', { houseNumber, visitorInfo })
+
+5.11 socket event listeners
+- room_created: รับข้อมูลห้องจาก server
+- ring_offline: แสดงข้อความเมื่อลูกบ้านไม่ได้อยู่หน้าจอ
+- call_accepted: เมื่อลูกบ้านรับสาย เข้าห้อง TRTC
+- ring_error: แสดง error ถ้าไม่สามารถโทรได้
+- call_ended: ปิดสายเมื่อคนโทรหรือ timeout
+
+5.12 enterRoom(startAt)
+- เรียก TRTC.enterRoom
+- เปิด local video/audio
+- รอ remote audio เมื่อ event มา
+
+5.13 showIncall(), startCallTimer(), updateTimerDisplay()
+- แสดง UI ระหว่างคุยสาย
+- นับเวลา 2 นาที
+
+5.14 endCall() / handleCallEnd(msg)
+- วางสายโดยส่ง end_call
+- ปิด TRTC และ reset UI
+
+5.15 loadHouses()
+- โหลดข้อมูลบ้านจาก /api/houses
+- สร้างปุ่มบ้านอัตโนมัติ
+
+6. การเก็บข้อมูล
+----------------
+6.1 houses
+- store: house_number, house_name
+- ใช้สร้างปุ่มเลือกบ้าน
+
+6.2 house_tokens
+- store: token, house_number, fcm_token, line_user_id
+- ใช้ยืนยัน resident link และส่ง notification
+
+6.3 rooms
+- store: id(roomCode), house_number, numeric_room_id, camera_user_id, resident_user_id, sdk_app_id, resident_sig, camera_sig, created_at
+- เก็บ session call เพื่อให้ระบบรู้ว่ากำลังรอสายหรืออยู่ในห้อง
+
+6.4 visitor_logs
+- store: house_number, room_code, id_number, name_th, name_en, birth_date, exp_date, ocr_raw, card_type, status, completed_at, created_at
+- เก็บประวัติผู้มาติดต่อและสถานะการเข้าหรือลาออก
+
+7. สรุปการทำงานแบบสั้น
+----------------
+- Rider กดบ้านหรือพูดเลขบ้าน
+- ระบบฟังเสียง → ถอดคำ → หาเลขบ้าน → ยืนยันก่อนโทร
+- ถ้าสแกนบัตร จะส่ง OCR ให้ backend วิเคราะห์ชื่อ/เลขบัตร
+- ถ้าอยากโทร ระบบจะสร้าง TRTC room แล้วส่งแจ้งลูกบ้านผ่าน LINE/FCM/socket
+- ลูกบ้านกดรับสายผ่าน resident page
+- ระบบเชื่อมต่อวิดีโอคอลและจบสายอัตโนมัติหลัง 2 นาที
+
+ไฟล์นี้สรุปโครงสร้าง backend, frontend, database, และการไหลของข้อมูลทั้งหมดในระบบให้ชัดเจนเพื่อให้เข้าใจได้ง่ายขึ้น

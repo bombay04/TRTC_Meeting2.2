@@ -7,7 +7,6 @@ const TLSSigAPIv2 = require('tls-sig-api-v2');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const admin = require('firebase-admin');
 const { Client, validateSignature, messagingApi } = require('@line/bot-sdk');
 
 // ==========================================
@@ -295,46 +294,6 @@ function parseThaiIdCard(text) {
     return { idNumber, nameTh, nameEn, lastName, birthDate, expDate, cardType, rawText: text };
 }
 
-// ==========================================
-// Firebase Admin Init
-// ==========================================
-const serviceAccount = {
-    type: 'service_account',
-    project_id: process.env.FIREBASE_PROJECT_ID,
-    private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    client_email: process.env.FIREBASE_CLIENT_EMAIL,
-    client_id: process.env.FIREBASE_CLIENT_ID,
-    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-    token_uri: 'https://oauth2.googleapis.com/token',
-};
-
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-
-const sendPushNotification = async (fcmToken, houseNumber, residentUrl) => {
-    if (!fcmToken) return;
-    try {
-        await admin.messaging().send({
-            token: fcmToken,
-            notification: {
-                title: '🔔 มีผู้ต้องการติดต่อ',
-                body: `บ้านเลขที่ ${houseNumber} — กรุณารับสาย`
-            },
-            webpush: {
-                fcmOptions: { link: residentUrl },
-                notification: {
-                    icon: '/icon-192.png',
-                    requireInteraction: true,
-                    vibrate: [200, 100, 200]
-                }
-            }
-        });
-        console.log(`📲 Push sent → บ้าน ${houseNumber}`);
-    } catch (err) {
-        console.error(`❌ Push failed:`, err.message);
-    }
-};
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -401,12 +360,10 @@ const initDb = async () => {
             CREATE TABLE IF NOT EXISTS house_tokens (
                 token VARCHAR(64) PRIMARY KEY,
                 house_number VARCHAR(10) NOT NULL,
-                fcm_token TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
         // migrate columns
-        await pool.query(`ALTER TABLE house_tokens ADD COLUMN IF NOT EXISTS fcm_token TEXT;`);
         await pool.query(`ALTER TABLE house_tokens ADD COLUMN IF NOT EXISTS line_user_id VARCHAR(50);`);
         await pool.query(`ALTER TABLE visitor_logs ADD COLUMN IF NOT EXISTS card_type VARCHAR(50);`);
         await pool.query(`ALTER TABLE visitor_logs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;`);
@@ -470,8 +427,7 @@ const generateToken = () => require('crypto').randomBytes(24).toString('hex');
 app.get('/api/admin/tokens', async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT ht.token, ht.house_number, h.house_name,
-                    ht.fcm_token IS NOT NULL as has_fcm, ht.created_at
+            `SELECT ht.token, ht.house_number, h.house_name, ht.created_at
              FROM house_tokens ht
              JOIN houses h ON h.house_number = ht.house_number
              ORDER BY ht.house_number`
@@ -627,23 +583,6 @@ app.get('/api/pending-call', async (req, res) => {
 });
 
 
-app.post('/api/save-fcm-token', async (req, res) => {
-    const { house, token, fcmToken } = req.body;
-    if (!house || !token || !fcmToken)
-        return res.status(400).json({ status: 'error', message: 'missing params' });
-    try {
-        const result = await pool.query(
-            'UPDATE house_tokens SET fcm_token = $1 WHERE house_number = $2 AND token = $3 RETURNING house_number',
-            [fcmToken, house, token]
-        );
-        if (result.rows.length === 0)
-            return res.status(403).json({ status: 'error', message: 'token ไม่ถูกต้อง' });
-        console.log(`💾 บันทึก FCM token บ้าน ${house}`);
-        res.json({ status: 'success' });
-    } catch (err) {
-        res.status(500).json({ status: 'error', message: err.message });
-    }
-});
 
 // ==========================================
 // REST API — TRTC / Status
@@ -858,8 +797,7 @@ app.get('/api/admin/line/status', async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT h.house_number, h.house_name,
-                    ht.line_user_id IS NOT NULL as has_line,
-                    ht.fcm_token IS NOT NULL as has_fcm
+                    ht.line_user_id IS NOT NULL as has_line
              FROM houses h
              LEFT JOIN house_tokens ht ON ht.house_number = h.house_number
              ORDER BY h.house_number`
@@ -930,7 +868,7 @@ io.on('connection', (socket) => {
         const roomPayload    = { houseNumber, roomCode, roomId: numericRoomId, sdkAppId };
 
         // ── ดึงข้อมูล token + LINE ของบ้านนี้ก่อนเสมอ ──
-        let fcmToken, houseUrlToken, lineUserId;
+        let houseUrlToken, lineUserId;
         try {
             const [, tokenResult] = await Promise.all([
                 pool.query(
@@ -939,11 +877,10 @@ io.on('connection', (socket) => {
                     [roomCode, houseNumber, numericRoomId, cameraUserId, residentUserId, sdkAppId, residentSig, cameraSig]
                 ),
                 pool.query(
-                    'SELECT fcm_token, token, line_user_id FROM house_tokens WHERE house_number = $1',
+                    'SELECT token, line_user_id FROM house_tokens WHERE house_number = $1',
                     [houseNumber]
                 )
             ]);
-            fcmToken      = tokenResult.rows[0]?.fcm_token;
             houseUrlToken = tokenResult.rows[0]?.token;
             lineUserId    = tokenResult.rows[0]?.line_user_id;
         } catch (err) {
@@ -980,9 +917,6 @@ io.on('connection', (socket) => {
         if (lineUserId) {
             sendLineMessage(lineUserId, houseNumber, residentUrl, visitorInfo || null); // fire-and-forget
             console.log(`💬 LINE message fired → บ้าน ${houseNumber}`);
-        } else if (fcmToken) {
-            sendPushNotification(fcmToken, houseNumber, residentUrl); // fallback FCM
-            console.log(`📲 FCM fallback fired → บ้าน ${houseNumber}`);
         }
 
         // ── ถ้าลูกบ้านเปิดหน้าเว็บอยู่ด้วย → ส่ง socket ควบคู่ไปเลย ──
