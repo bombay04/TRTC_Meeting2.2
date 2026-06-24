@@ -317,10 +317,10 @@
                     console.error(err);
                     showFailure('เกิดข้อผิดพลาดขณะสแกน');
                 }
-            }, 'image/jpeg', 0.9);
+               },'image/jpeg', 0.9);
         }
 
-        function resetAfterSuccess() {
+        function resetAfterSuccess() {   
             if (autoScanTimer) {
                 clearTimeout(autoScanTimer);
                 autoScanTimer = null;
