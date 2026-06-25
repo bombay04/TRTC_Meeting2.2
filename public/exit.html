@@ -82,7 +82,8 @@
         }
 
         .preview video,
-        .preview canvas {
+        .preview canvas,
+        .preview img {
             position: absolute;
             inset: 0;
             width: 100%;
@@ -91,7 +92,8 @@
             display: block;
         }
 
-        .preview canvas.hidden {
+        .preview canvas.hidden,
+        .preview img.hidden {
             display: none;
         }
 
@@ -207,6 +209,7 @@
         <div class="card">
             <div class="preview">
                 <video id="exitVideo" autoplay playsinline muted></video>
+                <img id="exitStream" class="hidden" alt="กล้องสด">
                 <canvas id="exitCanvas" class="hidden"></canvas>
                 <div class="overlay"></div>
             </div>
@@ -220,10 +223,13 @@
     <script>
         const video = document.getElementById('exitVideo');
         const canvas = document.getElementById('exitCanvas');
+        const streamImg = document.getElementById('exitStream');
         const retryButton = document.getElementById('retryButton');
         const captureButton = document.getElementById('captureButton');
         let exitStream = null;
-        let autoScanTimer = null;
+
+        // ── VIGI mode: live preview แบบ MJPEG stream (ffmpeg ค้างตัวเดียวฝั่ง server) ──
+        const USE_VIGI = true; // เปลี่ยนเป็น false เพื่อกลับไปใช้ webcam
 
         let toastTimer = null;
         function showToast(message, duration = 5000) {
@@ -235,50 +241,89 @@
         }
 
         async function startPreview() {
-            try {
-                exitStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 }, audio: false });
-                video.srcObject = exitStream;
-                showToast('กด "ถ่ายภาพ" เพื่อสแกนบัตร', 4500);
-                // Manual capture: user must press capture button
-                captureButton.disabled = false;
-            } catch (err) {
-                showToast('เปิดกล้องไม่ได้: ' + err.message, 6000);
-                retryButton.classList.remove('hidden');
-                console.error(err);
+            if (USE_VIGI) {
+                await startVigiPreview();
+            } else {
+                try {
+                    exitStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 }, audio: false });
+                    video.srcObject = exitStream;
+                    showToast('กด "ถ่ายภาพ" เพื่อสแกนบัตร', 4500);
+                    captureButton.disabled = false;
+                } catch (err) {
+                    showToast('เปิดกล้องไม่ได้: ' + err.message, 6000);
+                    retryButton.classList.remove('hidden');
+                }
             }
+        }
+
+        function startVigiPreview() {
+            video.style.display = 'none';
+            canvas.classList.add('hidden');
+            // cache-bust กัน browser ใช้ connection เก่าที่ค้าง
+            streamImg.src = '/api/vigi-stream?t=' + Date.now();
+            streamImg.classList.remove('hidden');
+            streamImg.onerror = () => {
+                console.warn('VIGI stream error — กล้องอาจเต็มหรือต่อไม่ได้');
+                showToast('เชื่อมต่อกล้องไม่ได้ ลองใหม่อีกครั้ง', 5000);
+            };
+            showToast('กด "ถ่ายภาพ" เพื่อสแกนบัตร', 4500);
+            captureButton.disabled = false;
+        }
+
+        function stopVigiStream() {
+            if (streamImg) {
+                streamImg.removeAttribute('src'); // ปิด connection → server kill ffmpeg
+                streamImg.classList.add('hidden');
+            }
+        }
+
+        // ดึง snapshot คมชัด 1 frame จาก server (ใช้ตอนกดถ่ายเพื่อส่ง OCR)
+        async function grabVigiSnapshotToCanvas() {
+            const res = await fetch('/api/vigi-snapshot?t=' + Date.now());
+            if (!res.ok) throw new Error('snapshot failed');
+            const blob = await res.blob();
+            const url  = URL.createObjectURL(blob);
+            const im   = new Image();
+            await new Promise((ok, no) => { im.onload = ok; im.onerror = no; im.src = url; });
+            canvas.width  = im.width;
+            canvas.height = im.height;
+            canvas.getContext('2d').drawImage(im, 0, 0);
+            URL.revokeObjectURL(url);
+            canvas.classList.remove('hidden');
         }
 
         function stopPreview() {
-            if (exitStream) {
-                exitStream.getTracks().forEach(t => t.stop());
-                exitStream = null;
-            }
-            if (autoScanTimer) {
-                clearTimeout(autoScanTimer);
-                autoScanTimer = null;
-            }
-            // ensure capture button state is reset
+            stopVigiStream();
+            if (exitStream) { exitStream.getTracks().forEach(t => t.stop()); exitStream = null; }
             if (captureButton) captureButton.disabled = false;
         }
 
-        function captureExitCard() {
-            if (!exitStream) return;
-            // disable capture to avoid duplicate presses
+        async function captureExitCard() {
             captureButton.disabled = true;
             retryButton.classList.add('hidden');
-            const width = video.videoWidth || 1280;
-            const height = video.videoHeight || 720;
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, width, height);
-
-            // หยุด stream ทันทีเพื่อ freeze ภาพไว้
-            exitStream.getTracks().forEach(t => t.stop());
-            exitStream = null;
-
-            canvas.classList.remove('hidden');
             showToast('กำลังถ่ายภาพบัตร...', 3500);
+
+            try {
+                if (USE_VIGI) {
+                    // หยุด stream แล้วดึง snapshot คมชัดมาวาดบน canvas
+                    stopVigiStream();
+                    await grabVigiSnapshotToCanvas();
+                } else {
+                    if (!exitStream) { captureButton.disabled = false; return; }
+                    const width  = video.videoWidth  || 1280;
+                    const height = video.videoHeight || 720;
+                    canvas.width  = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(video, 0, 0, width, height);
+                    exitStream.getTracks().forEach(t => t.stop());
+                    exitStream = null;
+                    canvas.classList.remove('hidden');
+                }
+            } catch(e) {
+                console.error('capture error:', e);
+                showFailure('ถ่ายภาพล้มเหลว');
+                return;
+            }
             processExitImage();
         }
 
@@ -320,13 +365,10 @@
                },'image/jpeg', 0.9);
         }
 
-        function resetAfterSuccess() {   
-            if (autoScanTimer) {
-                clearTimeout(autoScanTimer);
-                autoScanTimer = null;
-            }
+        function resetAfterSuccess() {
             setTimeout(() => {
                 canvas.classList.add('hidden');
+                if (!USE_VIGI) { canvas.classList.add('hidden'); }
                 if (captureButton) captureButton.disabled = false;
                 startPreview();
             }, 3000);

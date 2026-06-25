@@ -464,8 +464,7 @@ body {
 /* OCR Overlay */
 .ocr-overlay {
     position: fixed; inset: 0;
-    background: rgba(30,35,45,0.85);
-    backdrop-filter: blur(12px);
+    background: rgba(20,24,32,0.92);
     z-index: 150;
     display: none;
     flex-direction: column;
@@ -509,7 +508,7 @@ body {
     margin-bottom: 12px;
     display: flex; align-items: center; justify-content: center;
 }
-.ocr-preview video, .ocr-preview canvas {
+.ocr-preview video, .ocr-preview canvas, .ocr-preview img {
     width: 100%; height: 100%; object-fit: contain; position: absolute; inset: 0;
 }
 .ocr-preview canvas { display: none; }
@@ -679,6 +678,7 @@ body {
       <div class="ocr-left">
         <div class="ocr-preview">
             <video id="ocrVideo" autoplay playsinline muted></video>
+            <img id="vigiImg" style="display:none;" alt="VIGI preview">
             <canvas id="ocrCanvas"></canvas>
             <div class="ocr-guide">
                 <div class="ocr-guide-text">จัดบัตรให้อยู่ในกรอบ</div>
@@ -906,28 +906,81 @@ async function ringHouse(houseNumber) {
     document.getElementById('ocrSub').textContent = 'จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ';
     document.getElementById('ocrCanvas').style.display = 'none';
     // เปิดกล้องสำหรับสแกนบัตร
-    try {
-        ocrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 }, audio: false });
-        document.getElementById('ocrVideo').srcObject = ocrStream;
-    } catch(e) {
-        // ถ้าเปิดกล้องไม่ได้ ข้ามไปโทรเลย
-        skipOcrAndCall();
-        return;
-    }
+    // ── ถ้าเปิด VIGI mode ให้แสดง snapshot จากกล้อง IP แทน webcam ──
     document.getElementById('ocrOverlay').classList.add('active');
+    if (window.useVigiCamera) {
+        await startVigiPreview();
+    } else {
+        try {
+            ocrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 }, audio: false });
+            document.getElementById('ocrVideo').srcObject = ocrStream;
+        } catch(e) {
+            skipOcrAndCall();
+            return;
+        }
+    }
 }
+
+// ==========================================
+// VIGI Camera Mode — MJPEG stream ผ่าน <img> โดยตรง
+// ==========================================
+window.useVigiCamera = true; // เปลี่ยนเป็น false เพื่อกลับไปใช้ webcam
+
+let vigiLoopActive  = false;
+let vigiRestartTimer = null;
+
+function startVigiPreview() {
+    const video   = document.getElementById('ocrVideo');
+    const canvas  = document.getElementById('ocrCanvas');
+    const vigiImg = document.getElementById('vigiImg');
+
+    video.style.display   = 'none';
+    canvas.style.display  = 'none';
+    vigiImg.style.display = 'block';
+    vigiLoopActive = true;
+
+    function connectStream() {
+        if (!vigiLoopActive) return;
+        vigiImg.src = '/api/vigi-stream?' + Date.now();
+        // restart ทุก 30 วินาที เพื่อ flush memory ที่ browser สะสมจาก MJPEG
+        vigiRestartTimer = setTimeout(connectStream, 30000);
+    }
+
+    connectStream();
+}
+
+function stopVigiPreview() {
+    vigiLoopActive = false;
+    if (vigiRestartTimer) { clearTimeout(vigiRestartTimer); vigiRestartTimer = null; }
+    const vigiImg = document.getElementById('vigiImg');
+    vigiImg.src = '';
+    vigiImg.style.display = 'none';
+}
+
 
 // ถ่ายภาพและส่ง OCR
 async function captureOcr() {
     const video   = document.getElementById('ocrVideo');
     const canvas  = document.getElementById('ocrCanvas');
+    const vigiImg = document.getElementById('vigiImg');
     const btn     = document.getElementById('btnCapture');
 
-    canvas.width  = video.videoWidth  || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    canvas.style.display = 'block';
-    video.style.display = 'none';
+    if (window.useVigiCamera) {
+        // หยุด MJPEG stream แล้วถ่ายภาพจาก <img> ที่กำลังแสดงอยู่
+        stopVigiPreview();
+        canvas.width  = vigiImg.naturalWidth  || vigiImg.width  || 1280;
+        canvas.height = vigiImg.naturalHeight || vigiImg.height || 720;
+        canvas.getContext('2d').drawImage(vigiImg, 0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'block';
+    } else {
+        // Webcam: วาดจาก video element
+        canvas.width  = video.videoWidth  || 1280;
+        canvas.height = video.videoHeight || 720;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'block';
+        video.style.display  = 'none';
+        if (ocrStream) { ocrStream.getTracks().forEach(t => t.stop()); ocrStream = null; }
+    }
 
     btn.disabled = true;
     document.getElementById('ocrSub').textContent = 'กำลังประมวลผล OCR...';
@@ -941,7 +994,6 @@ async function captureOcr() {
 
             if (result.status === 'success' && result.data) {
                 ocrResult = result.data;
-                // แสดงข้อมูลทางขวา (cardType, nameTh, nameEn มาจาก server)
                 document.getElementById('ocrCardType').textContent = result.data.cardType  || 'ไม่ระบุประเภท';
                 document.getElementById('ocrNameTh').textContent   = result.data.nameTh   || '—';
                 document.getElementById('ocrNameEn').textContent   = result.data.nameEn   || '—';
@@ -958,8 +1010,14 @@ async function captureOcr() {
                 document.getElementById('ocrSub').textContent = '⚠️ อ่านบัตรไม่ได้ ลองถ่ายใหม่อีกครั้ง';
                 btn.disabled = false;
                 btn.textContent = 'ถ่ายภาพ';
-                video.style.display = 'block';
-                canvas.style.display = 'none';
+                // restart preview ตาม mode
+                if (window.useVigiCamera) {
+                    canvas.style.display = 'none';
+                    startVigiPreview();
+                } else {
+                    video.style.display = 'block';
+                    canvas.style.display = 'none';
+                }
             }
         }, 'image/jpeg', 0.9);
     } catch(e) {
@@ -1009,13 +1067,21 @@ function retakeOcr() {
     document.getElementById('ocrActionsInitial').style.display = 'flex';
     document.getElementById('btnCancelInitial').style.display = 'block';
     document.getElementById('ocrActionsAfter').classList.remove('show');
-    // รีเซ็ต UI กลับไปหน้ากล้อง
     canvas.style.display = 'none';
-    video.style.display  = 'block';
     document.getElementById('btnCapture').disabled    = false;
     document.getElementById('btnCapture').textContent = 'ถ่ายภาพ';
     document.getElementById('ocrSub').textContent     = 'จัดบัตรให้อยู่ในกรอบ แล้วกดถ่ายภาพ';
     ocrResult = null;
+
+    // restart preview ตาม mode
+    if (window.useVigiCamera) {
+        startVigiPreview(); // reconnect MJPEG stream
+    } else {
+        video.style.display = 'block';
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 }, audio: false })
+            .then(s => { ocrStream = s; video.srcObject = s; })
+            .catch(e => console.warn('retake camera error:', e.message));
+    }
 }
 
 // ยกเลิกการสแกน → ปิด overlay กลับหน้าเลือกบ้าน
@@ -1053,10 +1119,11 @@ function closeOcrOverlay() {
     document.getElementById('ocrOverlay').classList.remove('active');
     document.querySelector('.ocr-card').classList.remove('wide');
     document.querySelector('.ocr-body').classList.remove('show-right');
+    stopVigiPreview(); // ล้าง src → browser ปิด HTTP stream connection
     if (ocrStream) { ocrStream.getTracks().forEach(t => t.stop()); ocrStream = null; }
     const video = document.getElementById('ocrVideo');
     video.srcObject = null;
-    video.style.display = 'block';
+    video.style.display = 'none';
     document.getElementById('ocrCanvas').style.display = 'none';
 }
 
